@@ -5,11 +5,36 @@ from app.models.knowledge import KnowledgePoint, UserKnowledge, KnowledgeStatus
 from datetime import datetime
 
 
+KEYWORD_SUBJECT_RULES = [
+    (["排序", "链表", "栈", "队列", "树", "图", "哈希", "二叉", "堆", "数组", "字符串匹配", "查找", "遍历", "递归", "分治", "动态规划", "贪心", "回溯", "最短路径", "最小生成树", "拓扑"], "数据结构"),
+    (["算法", "时间复杂度", "空间复杂度", "NP", "近似算法"], "算法"),
+    (["编程", "代码", "程序", "编译", "调试", "面向对象", "设计模式", "软件工程", "测试"], "编程"),
+    (["操作系统", "进程", "线程", "内存管理", "调度", "死锁", "文件系统", "虚拟内存", "CPU"], "操作系统"),
+    (["网络", "TCP", "UDP", "HTTP", "IP", "路由", "协议", "socket", "DNS", "防火墙"], "计算机网络"),
+    (["数据库", "SQL", "关系", "索引", "事务", "范式", "查询优化", "存储"], "数据库"),
+    (["离散", "逻辑", "命题", "谓词", "集合论", "关系代数", "布尔", "图论", "组合"], "离散数学"),
+    (["微积分", "极限", "导数", "积分", "微分", "级数", "泰勒", "多元函数", "偏导"], "微积分"),
+    (["线性代数", "矩阵", "向量", "行列式", "特征值", "特征向量", "线性变换", "线性空间"], "线性代数"),
+    (["概率", "统计", "随机", "期望", "方差", "分布", "贝叶斯", "假设检验", "回归"], "概率论"),
+    (["力学", "运动", "牛顿", "动量", "能量", "功", "力", "加速度", "速度"], "力学"),
+    (["电磁", "电场", "磁场", "电路", "电压", "电流", "电阻", "电容", "电感", "麦克斯韦"], "电磁学"),
+    (["英语", "词汇", "语法", "阅读", "听力", "写作", "翻译", "口语"], "英语"),
+    (["数据结构", "结构"], "数据结构"),
+    (["数学", "函数", "方程", "不等式", "数列"], "数学"),
+]
+
+
+def _classify_subject_by_name(name: str) -> str:
+    for keywords, subject in KEYWORD_SUBJECT_RULES:
+        for kw in keywords:
+            if kw in name:
+                return subject
+    return "未分类"
+
+
 def _score_to_status(score: float) -> KnowledgeStatus:
     if score >= 80:
         return KnowledgeStatus.掌握
-    elif score >= 60:
-        return KnowledgeStatus.预警
     else:
         return KnowledgeStatus.薄弱
 
@@ -33,9 +58,10 @@ async def _find_or_create_kp(db: AsyncSession, name: str, name_to_kp: dict) -> K
                 kp = kp_obj
                 break
     if not kp:
+        subject = _classify_subject_by_name(name)
         kp = KnowledgePoint(
             name=name,
-            subject="通用",
+            subject=subject,
             status=KnowledgeStatus.掌握,
             difficulty=3,
         )

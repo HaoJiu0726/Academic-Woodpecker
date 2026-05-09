@@ -30,7 +30,7 @@ async def get_knowledge_graph(
     """获取知识图谱数据
     
     Args:
-        status: Optional status filter - '掌握', '预警', '薄弱', or None for all
+        status: Optional status filter - '掌握', '薄弱', or None for all
     """
     data = await dashboard_service.get_knowledge_graph(db, current_user.id, status)
     return UnifiedResponse(data=data)

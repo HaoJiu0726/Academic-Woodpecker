@@ -120,12 +120,12 @@ async def get_knowledge_graph(db: AsyncSession, user_id: int, status_filter: str
     """Get knowledge graph with user's mastery status, organized by subject.
 
     Returns knowledge points grouped by subject/category, with dynamic root nodes.
-    Supports filtering by status: 'mastered', 'warning', 'weak' or None for all.
+    Supports filtering by status: 'mastered', 'weak' or None for all.
     
     Args:
         db: Database session
         user_id: Current user ID
-        status_filter: Optional status filter ('掌握', '预警', '薄弱', or None)
+        status_filter: Optional status filter ('掌握', '薄弱', or None)
     
     Returns:
         Dictionary containing nodes and subjects
@@ -143,6 +143,7 @@ async def get_knowledge_graph(db: AsyncSession, user_id: int, status_filter: str
 
     # Define subject normalization mappings
     subject_mappings = {
+        "通用": None,
         "计算机": "计算机系统",
         "编程": "计算机系统",
         "算法": "计算机系统",
@@ -159,13 +160,41 @@ async def get_knowledge_graph(db: AsyncSession, user_id: int, status_filter: str
         "大学英语": "英语",
     }
 
+    keyword_subject_rules = [
+        (["排序", "链表", "栈", "队列", "树", "图", "哈希", "二叉", "堆", "数组", "字符串匹配", "查找", "遍历", "递归", "分治", "动态规划", "贪心", "回溯", "最短路径", "最小生成树", "拓扑"], "数据结构"),
+        (["算法", "时间复杂度", "空间复杂度", "NP", "近似算法"], "算法"),
+        (["编程", "代码", "程序", "编译", "调试", "面向对象", "设计模式", "软件工程", "测试"], "编程"),
+        (["操作系统", "进程", "线程", "内存管理", "调度", "死锁", "文件系统", "虚拟内存", "CPU"], "操作系统"),
+        (["网络", "TCP", "UDP", "HTTP", "IP", "路由", "协议", "socket", "DNS", "防火墙"], "计算机网络"),
+        (["数据库", "SQL", "关系", "索引", "事务", "范式", "查询优化", "存储"], "数据库"),
+        (["离散", "逻辑", "命题", "谓词", "集合论", "关系代数", "布尔", "图论", "组合"], "离散数学"),
+        (["微积分", "极限", "导数", "积分", "微分", "级数", "泰勒", "多元函数", "偏导"], "微积分"),
+        (["线性代数", "矩阵", "向量", "行列式", "特征值", "特征向量", "线性变换", "线性空间"], "线性代数"),
+        (["概率", "统计", "随机", "期望", "方差", "分布", "贝叶斯", "假设检验", "回归"], "概率论"),
+        (["力学", "运动", "牛顿", "动量", "能量", "功", "力", "加速度", "速度"], "力学"),
+        (["电磁", "电场", "磁场", "电路", "电压", "电流", "电阻", "电容", "电感", "麦克斯韦"], "电磁学"),
+        (["英语", "词汇", "语法", "阅读", "听力", "写作", "翻译", "口语"], "英语"),
+        (["数据结构", "结构"], "数据结构"),
+        (["数学", "函数", "方程", "不等式", "数列"], "数学"),
+    ]
+
+    def classify_by_name(name: str) -> str:
+        for keywords, subject in keyword_subject_rules:
+            for kw in keywords:
+                if kw in name:
+                    return subject
+        return "未分类"
+
     # Group knowledge points by subject
     subjects = {}
     
     for kp in all_kps:
-        # Determine subject with normalization
         subject_name = kp.subject if kp.subject else "未分类"
-        subject_name = subject_mappings.get(subject_name, subject_name)
+        mapped = subject_mappings.get(subject_name)
+        if mapped is None:
+            subject_name = classify_by_name(kp.name)
+        elif mapped:
+            subject_name = mapped
         
         if subject_name not in subjects:
             subjects[subject_name] = []
@@ -178,14 +207,11 @@ async def get_knowledge_graph(db: AsyncSession, user_id: int, status_filter: str
         if score is not None:
             if score >= 80:
                 status, color = "掌握", "emerald"
-            elif score >= 60:
-                status, color = "预警", "amber"
             else:
                 status, color = "薄弱", "rose"
         else:
-            # Use default status from knowledge point if no user score exists
             status = kp.status.value if hasattr(kp.status, "value") else kp.status
-            color_map = {"掌握": "emerald", "预警": "amber", "薄弱": "rose"}
+            color_map = {"掌握": "emerald", "薄弱": "rose"}
             color = color_map.get(status, "gray")
 
         # Apply status filter if specified
@@ -232,18 +258,16 @@ async def get_knowledge_graph(db: AsyncSession, user_id: int, status_filter: str
         "stats": {
             "total": 0,
             "mastered": 0,
-            "warning": 0,
             "weak": 0,
         }
     }
 
-    subject_id_counter = 1000  # Use high IDs for subjects to avoid conflict
+    subject_id_counter = 1000
     total_count = 0
-    status_counts = {"掌握": 0, "预警": 0, "薄弱": 0}
+    status_counts = {"掌握": 0, "薄弱": 0}
     
     for subject_name, kps in subjects.items():
-        # Calculate subject statistics
-        subject_stats = {"掌握": 0, "预警": 0, "薄弱": 0}
+        subject_stats = {"掌握": 0, "薄弱": 0}
         subject_total = len(kps)
         total_count += subject_total
         
@@ -258,7 +282,7 @@ async def get_knowledge_graph(db: AsyncSession, user_id: int, status_filter: str
         subject_node = {
             "id": subject_id_counter,
             "name": subject_name,
-            "status": "掌握" if subject_mastery_rate >= 80 else "预警" if subject_mastery_rate >= 60 else "薄弱",
+            "status": "掌握" if subject_mastery_rate >= 80 else "薄弱",
             "statusColor": "primary",
             "description": f"{subject_name}相关知识点汇总",
             "examFrequency": "高",
@@ -282,7 +306,6 @@ async def get_knowledge_graph(db: AsyncSession, user_id: int, status_filter: str
     # Update overall stats
     result_data["stats"]["total"] = total_count
     result_data["stats"]["mastered"] = status_counts["掌握"]
-    result_data["stats"]["warning"] = status_counts["预警"]
     result_data["stats"]["weak"] = status_counts["薄弱"]
 
     return result_data

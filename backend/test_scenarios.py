@@ -146,8 +146,8 @@ scenario("Knowledge rate updated after multi-upload",
 r = httpx.get(f"{BASE}/api/dashboard/knowledge-graph", headers=h)
 graph2 = r.json()["data"]
 nodes_with_status = sum(1 for n in graph2["nodes"] for c in n.get("children", [])
-                        if c.get("status") in ("薄弱", "预警"))
-print(f"  Nodes with weak/warning status: {nodes_with_status}")
+                        if c.get("status") == "薄弱")
+print(f"  Nodes with weak status: {nodes_with_status}")
 
 # =============================================
 # SCENARIO 2: Recommendation Relevance

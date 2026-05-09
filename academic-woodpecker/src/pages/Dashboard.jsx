@@ -1,8 +1,19 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import '../Dashboard.scss';
 import DailyPush from '../components/DailyPush';
 import { dashboardApi } from '../api';
+
+const SUBJECT_COLORS = [
+  { bg: 'linear-gradient(135deg, #6366f1, #8b5cf6)', glow: 'rgba(99, 102, 241, 0.5)', line: 'rgba(99, 102, 241, 0.35)' },
+  { bg: 'linear-gradient(135deg, #0ea5e9, #06b6d4)', glow: 'rgba(14, 165, 233, 0.5)', line: 'rgba(14, 165, 233, 0.35)' },
+  { bg: 'linear-gradient(135deg, #f59e0b, #f97316)', glow: 'rgba(245, 158, 11, 0.5)', line: 'rgba(245, 158, 11, 0.35)' },
+  { bg: 'linear-gradient(135deg, #10b981, #059669)', glow: 'rgba(16, 185, 129, 0.5)', line: 'rgba(16, 185, 129, 0.35)' },
+  { bg: 'linear-gradient(135deg, #ec4899, #f43f5e)', glow: 'rgba(236, 72, 153, 0.5)', line: 'rgba(236, 72, 153, 0.35)' },
+  { bg: 'linear-gradient(135deg, #8b5cf6, #a855f7)', glow: 'rgba(139, 92, 246, 0.5)', line: 'rgba(139, 92, 246, 0.35)' },
+  { bg: 'linear-gradient(135deg, #14b8a6, #0d9488)', glow: 'rgba(20, 184, 166, 0.5)', line: 'rgba(20, 184, 166, 0.35)' },
+  { bg: 'linear-gradient(135deg, #f97316, #ef4444)', glow: 'rgba(249, 115, 22, 0.5)', line: 'rgba(249, 115, 22, 0.35)' },
+];
 
 const Dashboard = () => {
   const navigate = useNavigate();
@@ -16,14 +27,16 @@ const Dashboard = () => {
     lastDiagnosis: null
   });
   const [knowledgeGraph, setKnowledgeGraph] = useState([]);
-  const [subjects, setSubjects] = useState([]); // 新增：存储科目信息
+  const [subjects, setSubjects] = useState([]);
   const [graphOffset, setGraphOffset] = useState({ x: 0, y: 0 });
   const [isDragging, setIsDragging] = useState(false);
   const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
   const [hoveredNode, setHoveredNode] = useState(null);
   const [tooltipPosition, setTooltipPosition] = useState({ x: 0, y: 0 });
   const [selectedStatus, setSelectedStatus] = useState(null);
-  const [nodePositions, setNodePositions] = useState({});
+  const [expandedSubjects, setExpandedSubjects] = useState({});
+  const [zoomLevel, setZoomLevel] = useState(1);
+  const [isDetailLoading, setIsDetailLoading] = useState(false);
   const graphContainerRef = useRef(null);
 
   useEffect(() => {
@@ -38,6 +51,14 @@ const Dashboard = () => {
       return () => clearTimeout(timer);
     }
   }, [overviewData]);
+
+  useEffect(() => {
+    if (subjects.length > 0) {
+      const initial = {};
+      subjects.forEach(s => { initial[s.id] = true; });
+      setExpandedSubjects(initial);
+    }
+  }, [subjects]);
 
   const fetchDashboardData = async (statusFilter = null) => {
     setIsLoading(true);
@@ -71,27 +92,37 @@ const Dashboard = () => {
     }
   };
 
-  // 状态筛选按钮点击处理
   const handleStatusFilter = (status) => {
     setSelectedStatus(status);
-    // 清空节点位置缓存，以便重新布局
-    setNodePositions({});
     fetchDashboardData(status);
   };
 
-  const getKnowledgeStatus = (rate) => {
-    if (rate >= 80) return { status: '掌握', color: 'bg-emerald-gradient' };
-    if (rate >= 60) return { status: '预警', color: 'bg-amber-gradient' };
-    return { status: '薄弱', color: 'bg-rose-gradient' };
+  const toggleSubjectExpand = (subjectId) => {
+    setExpandedSubjects(prev => ({
+      ...prev,
+      [subjectId]: !prev[subjectId]
+    }));
+  };
+
+  const expandAllSubjects = () => {
+    const allExpanded = {};
+    subjects.forEach(s => { allExpanded[s.id] = true; });
+    setExpandedSubjects(allExpanded);
+  };
+
+  const collapseAllSubjects = () => {
+    const allCollapsed = {};
+    subjects.forEach(s => { allCollapsed[s.id] = false; });
+    setExpandedSubjects(allCollapsed);
   };
 
   const handleMouseDown = (e) => {
-    if (e.target.closest('.knowledge-node')) return;
+    if (e.target.closest('.knowledge-node') || e.target.closest('.subject-node') || e.target.closest('.graph-controls')) return;
     setIsDragging(true);
     setDragStart({ x: e.clientX - graphOffset.x, y: e.clientY - graphOffset.y });
   };
 
-  const handleMouseMove = (e) => {
+  const handleMouseMove = useCallback((e) => {
     if (isDragging) {
       setGraphOffset({
         x: e.clientX - dragStart.x,
@@ -107,11 +138,25 @@ const Dashboard = () => {
         });
       }
     }
-  };
+  }, [isDragging, dragStart, hoveredNode]);
 
   const handleMouseUp = () => {
     setIsDragging(false);
   };
+
+  const handleWheel = useCallback((e) => {
+    e.preventDefault();
+    const delta = e.deltaY > 0 ? -0.08 : 0.08;
+    setZoomLevel(prev => Math.max(0.3, Math.min(3, prev + delta)));
+  }, []);
+
+  useEffect(() => {
+    const container = graphContainerRef.current;
+    if (container) {
+      container.addEventListener('wheel', handleWheel, { passive: false });
+      return () => container.removeEventListener('wheel', handleWheel);
+    }
+  }, [handleWheel]);
 
   const handleNodeHover = (node, e) => {
     if (node) {
@@ -128,20 +173,27 @@ const Dashboard = () => {
 
   const handleResetView = () => {
     setGraphOffset({ x: 0, y: 0 });
+    setZoomLevel(1);
+  };
+
+  const handleZoomIn = () => {
+    setZoomLevel(prev => Math.min(3, prev + 0.2));
+  };
+
+  const handleZoomOut = () => {
+    setZoomLevel(prev => Math.max(0.3, prev - 0.2));
   };
 
   const getStatusTextColor = (status) => {
     switch (status) {
       case '掌握': return 'text-emerald-600';
-      case '预警': return 'text-amber-600';
       case '薄弱': return 'text-rose-600';
       default: return 'text-gray-600';
     }
   };
 
-  const [isDetailLoading, setIsDetailLoading] = useState(false);
-
   const handleNodeClick = async (node) => {
+    if (node.isSubject) return;
     if (node.status === '薄弱' || node.status === 'weak') {
       setIsDetailLoading(true);
       try {
@@ -174,9 +226,6 @@ const Dashboard = () => {
       case '掌握':
       case 'mastered':
         return 'bg-emerald-gradient';
-      case '预警':
-      case 'warning':
-        return 'bg-amber-gradient';
       case '薄弱':
       case 'weak':
         return 'bg-rose-gradient';
@@ -185,70 +234,24 @@ const Dashboard = () => {
     }
   };
 
-  // 获取节点位置 - 使用缓存防止抖动
-  const getNodePosition = (nodeId, index, total) => {
-    // 如果已经有缓存的位置，直接返回
-    if (nodePositions[nodeId]) {
-      return nodePositions[nodeId];
-    }
-    
-    if (total === 0) return { x: 50, y: 50 };
-    
-    // 使用极坐标系统生成自然分布
-    const angle = (index / total) * Math.PI * 2 - Math.PI / 2; // 从顶部开始
-    const radius = 25 + Math.random() * 10; // 在25%-35%范围内随机
-    
-    // 添加轻微的随机偏移，使布局更自然
-    const offsetX = (Math.random() - 0.5) * 8;
-    const offsetY = (Math.random() - 0.5) * 8;
-    
-    const x = 50 + Math.cos(angle) * radius + offsetX;
-    const y = 50 + Math.sin(angle) * radius + offsetY;
-    
-    const position = { 
-      x: Math.max(12, Math.min(88, x)), // 限制在可见区域内
-      y: Math.max(12, Math.min(88, y))
-    };
-    
-    // 缓存位置
-    setNodePositions(prev => ({ ...prev, [nodeId]: position }));
-    
-    return position;
-  };
-
-  // 过滤后的知识点
-  const filteredGraph = knowledgeGraph.filter(node => {
-    if (!selectedStatus) return true;
-    const nodeStatus = node.status === 'weak' ? '薄弱' : node.status === 'warning' ? '预警' : node.status === 'mastered' ? '掌握' : node.status;
-    return nodeStatus === selectedStatus;
-  });
-
-  // 获取连接线颜色
   const getNodeConnectionColor = (status) => {
     switch (status) {
       case '掌握':
       case 'mastered':
-        return 'rgba(52, 211, 153, 0.4)'; // 绿色
-      case '预警':
-      case 'warning':
-        return 'rgba(245, 158, 11, 0.4)'; // 橙色
+        return 'rgba(52, 211, 153, 0.4)';
       case '薄弱':
       case 'weak':
-        return 'rgba(244, 63, 94, 0.4)'; // 红色
+        return 'rgba(244, 63, 94, 0.4)';
       default:
-        return 'rgba(156, 163, 175, 0.4)'; // 灰色
+        return 'rgba(156, 163, 175, 0.4)';
     }
   };
 
-  // 新增：缺失的节点光晕样式函数
   const getNodeGlowClass = (status) => {
     switch (status) {
       case '掌握':
       case 'mastered':
         return 'knowledge-node-glow-success';
-      case '预警':
-      case 'warning':
-        return 'knowledge-node-glow-warning';
       case '薄弱':
       case 'weak':
         return 'knowledge-node-glow-danger';
@@ -256,6 +259,127 @@ const Dashboard = () => {
         return '';
     }
   };
+
+  const filteredGraph = useMemo(() => {
+    return knowledgeGraph.filter(node => {
+      if (!selectedStatus) return true;
+      const nodeStatus = node.status === 'weak' ? '薄弱' : node.status === 'mastered' ? '掌握' : node.status;
+      return nodeStatus === selectedStatus;
+    });
+  }, [knowledgeGraph, selectedStatus]);
+
+  const layoutData = useMemo(() => {
+    const subjectCount = subjects.length;
+    if (subjectCount === 0) return { subjectPositions: {}, nodePositions: {}, nodeSizes: {} };
+
+    const subjectPositions = {};
+    const nodePositions = {};
+    const nodeSizes = {};
+
+    const subjectRadius = Math.min(35, 20 + subjectCount * 2);
+
+    subjects.forEach((subject, idx) => {
+      const angle = (idx / subjectCount) * Math.PI * 2 - Math.PI / 2;
+      const sx = 50 + Math.cos(angle) * subjectRadius;
+      const sy = 50 + Math.sin(angle) * subjectRadius;
+      subjectPositions[subject.id] = { x: sx, y: sy, angle };
+
+      const categoryNodes = filteredGraph.filter(n => n.category === subject.name);
+      const isExpanded = expandedSubjects[subject.id] !== false;
+      const visibleNodes = isExpanded ? categoryNodes : [];
+
+      const nodeCount = visibleNodes.length;
+      if (nodeCount === 0) return;
+
+      const nodeSize = nodeCount <= 3 ? 3.5 : nodeCount <= 6 ? 3 : nodeCount <= 10 ? 2.5 : 2;
+      const nodeRadius = Math.max(14, 10 + nodeCount * 1.5);
+      const angularSpread = Math.min(Math.PI, Math.max(0.3, nodeCount * 0.3));
+      const startAngle = angle - angularSpread / 2;
+
+      visibleNodes.forEach((node, ni) => {
+        let na;
+        if (nodeCount === 1) {
+          na = angle;
+        } else {
+          na = startAngle + (ni / (nodeCount - 1)) * angularSpread;
+        }
+        const nr = nodeRadius;
+        const nx = sx + Math.cos(na) * nr;
+        const ny = sy + Math.sin(na) * nr;
+        nodePositions[node.id] = { x: nx, y: ny };
+        nodeSizes[node.id] = nodeSize;
+      });
+    });
+
+    const allNodeIds = Object.keys(nodePositions);
+    const minDist = 6;
+
+    for (let iter = 0; iter < 30; iter++) {
+      let moved = false;
+      for (let i = 0; i < allNodeIds.length; i++) {
+        const idA = allNodeIds[i];
+        const posA = nodePositions[idA];
+        for (let j = i + 1; j < allNodeIds.length; j++) {
+          const idB = allNodeIds[j];
+          const posB = nodePositions[idB];
+          const dx = posB.x - posA.x;
+          const dy = posB.y - posA.y;
+          const dist = Math.sqrt(dx * dx + dy * dy);
+          if (dist < minDist && dist > 0.01) {
+            const overlap = (minDist - dist) / 2;
+            const nx = dx / dist;
+            const ny = dy / dist;
+            posA.x -= nx * overlap * 0.6;
+            posA.y -= ny * overlap * 0.6;
+            posB.x += nx * overlap * 0.6;
+            posB.y += ny * overlap * 0.6;
+            moved = true;
+          }
+        }
+      }
+      if (!moved) break;
+    }
+
+    for (const id of allNodeIds) {
+      const pos = nodePositions[id];
+      let bestSubject = null;
+      let bestDist = Infinity;
+      for (const subject of subjects) {
+        const sPos = subjectPositions[subject.id];
+        if (!sPos) continue;
+        const dx = pos.x - sPos.x;
+        const dy = pos.y - sPos.y;
+        const d = Math.sqrt(dx * dx + dy * dy);
+        if (d < bestDist) {
+          bestDist = d;
+          bestSubject = subject;
+        }
+      }
+      if (bestSubject && bestDist > 0.01) {
+        const sPos = subjectPositions[bestSubject.id];
+        const dx = pos.x - sPos.x;
+        const dy = pos.y - sPos.y;
+        const d = Math.sqrt(dx * dx + dy * dy);
+        const maxDist = 25;
+        if (d > maxDist) {
+          pos.x = sPos.x + (dx / d) * maxDist;
+          pos.y = sPos.y + (dy / d) * maxDist;
+        }
+      }
+      pos.x = Math.max(5, Math.min(95, pos.x));
+      pos.y = Math.max(5, Math.min(95, pos.y));
+    }
+
+    return { subjectPositions, nodePositions, nodeSizes };
+  }, [subjects, filteredGraph, expandedSubjects]);
+
+  const subjectColorMap = useMemo(() => {
+    const map = {};
+    subjects.forEach((s, i) => {
+      map[s.id] = SUBJECT_COLORS[i % SUBJECT_COLORS.length];
+    });
+    return map;
+  }, [subjects]);
 
   return (
     <div className="dashboard-page">
@@ -411,15 +535,14 @@ const Dashboard = () => {
           <div className="dashboard-graph-header">
             <div>
               <h3 className="text-xl font-bold text-dark-800">知识图谱</h3>
-              <p className="text-sm text-dark-400 mt-1">点击知识点查看详情</p>
+              <p className="text-sm text-dark-400 mt-1">点击分类展开/折叠，点击知识点查看详情</p>
             </div>
             <div className="dashboard-graph-badge">
               <span className="dashboard-graph-badge-dot"></span>
               <span>实时更新</span>
             </div>
           </div>
-          
-          {/* 状态筛选按钮 */}
+
           <div className="dashboard-graph-filter">
             <button
               onClick={() => handleStatusFilter('掌握')}
@@ -431,17 +554,6 @@ const Dashboard = () => {
             >
               <span className="inline-block w-2 h-2 rounded-full bg-emerald-400 mr-2"></span>
               掌握
-            </button>
-            <button
-              onClick={() => handleStatusFilter('预警')}
-              className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
-                selectedStatus === '预警'
-                  ? 'bg-amber-500 text-white shadow-lg shadow-amber-200'
-                  : 'bg-white text-dark-600 hover:bg-dark-50 border border-dark-200'
-              }`}
-            >
-              <span className="inline-block w-2 h-2 rounded-full bg-amber-400 mr-2"></span>
-              预警
             </button>
             <button
               onClick={() => handleStatusFilter('薄弱')}
@@ -465,8 +577,21 @@ const Dashboard = () => {
               <span className="inline-block w-2 h-2 rounded-full bg-primary-400 mr-2"></span>
               全部
             </button>
+            <div className="flex-1"></div>
+            <button
+              onClick={expandAllSubjects}
+              className="px-3 py-2 rounded-lg text-xs font-medium bg-white text-dark-600 hover:bg-dark-50 border border-dark-200 transition-all"
+            >
+              全部展开
+            </button>
+            <button
+              onClick={collapseAllSubjects}
+              className="px-3 py-2 rounded-lg text-xs font-medium bg-white text-dark-600 hover:bg-dark-50 border border-dark-200 transition-all"
+            >
+              全部折叠
+            </button>
           </div>
-          
+
           <div
             className="dashboard-graph-chart"
             ref={graphContainerRef}
@@ -474,7 +599,7 @@ const Dashboard = () => {
             onMouseMove={handleMouseMove}
             onMouseUp={handleMouseUp}
             onMouseLeave={handleMouseUp}
-            style={{ cursor: isDragging ? 'grabbing' : 'grab' }}
+            style={{ cursor: isDragging ? 'grabbing' : 'grab', '--subject-count': subjects.length }}
           >
             <div className="absolute inset-0 opacity-40">
               <div className="absolute top-1/4 left-1/4 w-32 h-32 bg-primary-200 rounded-full blur-3xl"></div>
@@ -483,121 +608,156 @@ const Dashboard = () => {
 
             <div
               className="relative w-full h-full transition-transform duration-75"
-              style={{ transform: `translate(${graphOffset.x}px, ${graphOffset.y}px)` }}
+              style={{ transform: `translate(${graphOffset.x}px, ${graphOffset.y}px) scale(${zoomLevel})`, transformOrigin: 'center center' }}
             >
-              {/* 知识图谱连接线 */}
               <svg className="absolute inset-0 w-full h-full pointer-events-none" style={{ zIndex: 1 }}>
-                {filteredGraph.map((node, index) => {
-                  const connections = node.connections || [];
-                  return connections.map((connId) => {
-                    const targetNode = filteredGraph.find(n => n.id === connId);
-                    if (!targetNode) return null;
-                    
-                    const nodePos = getNodePosition(node.id, index, filteredGraph.length);
-                    const targetPos = getNodePosition(targetNode.id, filteredGraph.findIndex(n => n.id === connId), filteredGraph.length);
-                    
-                    // 计算从中心节点到两个节点的连线
-                    const centerX = 50;
-                    const centerY = 50;
-                    
-                    return (
-                      <g key={`${node.id}-${connId}`}>
-                        {/* 从中心到当前节点 */}
-                        <line
-                          x1={`${centerX}%`}
-                          y1={`${centerY}%`}
-                          x2={`${nodePos.x}%`}
-                          y2={`${nodePos.y}%`}
-                          stroke="rgba(147, 112, 219, 0.3)"
-                          strokeWidth="1"
-                          strokeDasharray="4,4"
-                          className="animate-pulse-slow"
-                        />
-                        {/* 从中心到目标节点 */}
-                        <line
-                          x1={`${centerX}%`}
-                          y1={`${centerY}%`}
-                          x2={`${targetPos.x}%`}
-                          y2={`${targetPos.y}%`}
-                          stroke="rgba(147, 112, 219, 0.3)"
-                          strokeWidth="1"
-                          strokeDasharray="4,4"
-                          className="animate-pulse-slow"
-                        />
-                      </g>
-                    );
-                  });
-                })}
-                {/* 中心到所有节点的连接线 */}
-                {filteredGraph.map((node, index) => {
-                  const nodePos = getNodePosition(node.id, index, filteredGraph.length);
+                {subjects.map((subject) => {
+                  const sPos = layoutData.subjectPositions[subject.id];
+                  if (!sPos) return null;
+                  const color = subjectColorMap[subject.id];
+                  const isExpanded = expandedSubjects[subject.id] !== false;
+                  const categoryNodes = filteredGraph.filter(n => n.category === subject.name);
+                  const visibleNodes = isExpanded ? categoryNodes : [];
+
                   return (
-                    <line
-                      key={`center-${node.id}`}
-                      x1="50%"
-                      y1="50%"
-                      x2={`${nodePos.x}%`}
-                      y2={`${nodePos.y}%`}
-                      stroke={getNodeConnectionColor(node.status)}
-                      strokeWidth="2"
-                      className="transition-all duration-500"
-                    />
+                    <g key={`lines-${subject.id}`}>
+                      <line
+                        x1="50%"
+                        y1="50%"
+                        x2={`${sPos.x}%`}
+                        y2={`${sPos.y}%`}
+                        stroke={color.line}
+                        strokeWidth="2"
+                        strokeDasharray="6,4"
+                        opacity="0.6"
+                      />
+                      {visibleNodes.map(node => {
+                        const nPos = layoutData.nodePositions[node.id];
+                        if (!nPos) return null;
+                        const midX = (sPos.x + nPos.x) / 2;
+                        const midY = (sPos.y + nPos.y) / 2;
+                        return (
+                          <line
+                            key={`sline-${node.id}`}
+                            x1={`${sPos.x}%`}
+                            y1={`${sPos.y}%`}
+                            x2={`${nPos.x}%`}
+                            y2={`${nPos.y}%`}
+                            stroke={getNodeConnectionColor(node.status)}
+                            strokeWidth="1"
+                            opacity="0.5"
+                          />
+                        );
+                      })}
+                    </g>
                   );
                 })}
               </svg>
 
-              {/* 中心节点 - 使用第一个科目或默认"知识体系" */}
               <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 z-20">
                 <div className="knowledge-node-circle-center flex items-center justify-center animate-float">
                   <div className="w-24 h-24 rounded-full backdrop-blur-sm flex items-center justify-center">
-                    <span className="font-bold text-white text-sm">{subjects.length > 0 ? subjects[0].name : '知识体系'}</span>
+                    <span className="font-bold text-white text-sm">知识体系</span>
                   </div>
                 </div>
               </div>
 
-              {filteredGraph.map((node, index) => {
-                const nodePos = getNodePosition(node.id, index, filteredGraph.length);
+              {subjects.map((subject) => {
+                const sPos = layoutData.subjectPositions[subject.id];
+                if (!sPos) return null;
+                const color = subjectColorMap[subject.id];
+                const isExpanded = expandedSubjects[subject.id] !== false;
+                const categoryNodes = filteredGraph.filter(n => n.category === subject.name);
+                const nodeCount = categoryNodes.length;
+                const subjectSize = nodeCount <= 3 ? 5 : nodeCount <= 6 ? 5.5 : nodeCount <= 10 ? 6 : 6.5;
 
                 return (
-                  <div
-                    key={node.id}
-                    className={`knowledge-node ${node.status === '薄弱' || node.status === 'weak' ? 'knowledge-node-weak' : ''} ${node.status === 'warning' || node.status === '预警' ? 'knowledge-node-warning' : ''}`}
-                    style={{ 
-                      top: `${nodePos.y}%`, 
-                      left: `${nodePos.x}%`,
-                      transform: 'translate(-50%, -50%)'
-                    }}
-                    onClick={() => handleNodeClick(node)}
-                    onMouseEnter={(e) => handleNodeHover(node, e)}
-                    onMouseLeave={() => setHoveredNode(null)}
-                  >
-                    <div className={`knowledge-node-circle ${getNodeColorClass(node.status)} flex items-center justify-center shadow-lg transition-all duration-300 group-hover:scale-110 group-hover:shadow-xl ${node.status === '薄弱' || node.status === 'weak' ? 'ring-4 ring-rose-200 animate-pulse-soft' : ''} ${node.status === 'warning' || node.status === '预警' ? 'ring-4 ring-amber-200 animate-pulse-soft-warning' : ''}`}>
-                      <span
-                        className="text-white text-xs font-semibold px-2 text-center leading-tight"
-                        style={{
-                          wordBreak: 'break-word',
-                          whiteSpace: 'normal',
-                          maxWidth: '100px',
-                          overflow: 'hidden',
-                          textOverflow: 'ellipsis',
-                          display: '-webkit-box',
-                          WebkitLineClamp: 2,
-                          WebkitBoxOrient: 'vertical'
-                        }}
-                        title={node.name}
+                  <React.Fragment key={`subject-${subject.id}`}>
+                    <div
+                      className="subject-node"
+                      style={{
+                        top: `${sPos.y}%`,
+                        left: `${sPos.x}%`,
+                        transform: 'translate(-50%, -50%)'
+                      }}
+                      onClick={() => toggleSubjectExpand(subject.id)}
+                      onMouseEnter={(e) => handleNodeHover({ ...subject, isSubject: true, name: subject.name, totalNodes: nodeCount }, e)}
+                      onMouseLeave={() => setHoveredNode(null)}
+                    >
+                      <div
+                        className="subject-node-circle"
+                        style={{ background: color.bg, width: `${subjectSize}rem`, height: `${subjectSize}rem` }}
                       >
-                        {node.name}
-                      </span>
+                        <span className="text-white font-bold text-sm px-2 text-center leading-tight">
+                          {subject.name}
+                        </span>
+                      </div>
+                      <div className="subject-node-label">
+                        <span className="text-xs font-semibold text-dark-600">{nodeCount} 个知识点</span>
+                      </div>
+                      <div className="subject-node-badge" style={{ background: color.bg }}>
+                        <span className="text-white text-xs font-bold">
+                          {isExpanded ? '−' : '+'}
+                        </span>
+                      </div>
+                      <div
+                        className="subject-node-glow"
+                        style={{ background: `radial-gradient(circle, ${color.glow} 0%, transparent 70%)` }}
+                      ></div>
                     </div>
-                    <div className="knowledge-node-label">
-                      <span className={`text-xs font-medium ${getStatusTextColor(node.status)}`}>
-                        {node.status === 'weak' ? '薄弱' : node.status === 'warning' ? '预警' : node.status === 'mastered' ? '掌握' : node.status}
-                        {node.score !== undefined && node.score !== null && ` (${node.score}分)`}
-                      </span>
-                    </div>
-                    {/* 节点光晕效果 */}
-                    <div className={`knowledge-node-glow ${getNodeGlowClass(node.status)}`}></div>
-                  </div>
+
+                    {isExpanded && categoryNodes.map(node => {
+                      const nPos = layoutData.nodePositions[node.id];
+                      if (!nPos) return null;
+                      const nSize = layoutData.nodeSizes?.[node.id] || 3;
+                      const sizeRem = `${nSize}rem`;
+
+                      return (
+                        <div
+                          key={node.id}
+                          className={`knowledge-node ${node.status === '薄弱' || node.status === 'weak' ? 'knowledge-node-weak' : ''}`}
+                          style={{
+                            top: `${nPos.y}%`,
+                            left: `${nPos.x}%`,
+                            transform: 'translate(-50%, -50%)'
+                          }}
+                          onClick={() => handleNodeClick(node)}
+                          onMouseEnter={(e) => handleNodeHover(node, e)}
+                          onMouseLeave={() => setHoveredNode(null)}
+                        >
+                          <div
+                            className={`knowledge-node-circle ${getNodeColorClass(node.status)} flex items-center justify-center shadow-lg transition-all duration-300 ${node.status === '薄弱' || node.status === 'weak' ? 'ring-4 ring-rose-200 animate-pulse-soft' : ''}`}
+                            style={{ width: sizeRem, height: sizeRem }}
+                          >
+                            <span
+                              className="text-white font-semibold px-1 text-center leading-tight"
+                              style={{
+                                fontSize: nSize <= 2.5 ? '0.5625rem' : nSize <= 3 ? '0.625rem' : '0.75rem',
+                                wordBreak: 'break-word',
+                                whiteSpace: 'normal',
+                                maxWidth: `${nSize * 2.5}rem`,
+                                overflow: 'hidden',
+                                textOverflow: 'ellipsis',
+                                display: '-webkit-box',
+                                WebkitLineClamp: 2,
+                                WebkitBoxOrient: 'vertical'
+                              }}
+                              title={node.name}
+                            >
+                              {node.name}
+                            </span>
+                          </div>
+                          <div className="knowledge-node-label knowledge-node-label-always">
+                            <span className={`text-xs font-medium ${getStatusTextColor(node.status)}`}>
+                              {node.status === 'weak' ? '薄弱' : node.status === 'mastered' ? '掌握' : node.status}
+                              {node.score !== undefined && node.score !== null && ` (${node.score}分)`}
+                            </span>
+                          </div>
+                          <div className={`knowledge-node-glow ${getNodeGlowClass(node.status)}`}></div>
+                        </div>
+                      );
+                    })}
+                  </React.Fragment>
                 );
               })}
             </div>
@@ -608,39 +768,84 @@ const Dashboard = () => {
                 style={{ top: tooltipPosition.y, left: tooltipPosition.x }}
               >
                 <div className="font-bold text-sm mb-1">{hoveredNode.name}</div>
-                <div className="text-xs text-dark-300">
-                  状态: {hoveredNode.status === 'weak' ? '薄弱' : hoveredNode.status === 'warning' ? '预警' : hoveredNode.status === 'mastered' ? '掌握' : hoveredNode.status}
-                </div>
-                {hoveredNode.description && (
-                  <div className="text-xs text-dark-300 mt-1 line-clamp-2">{hoveredNode.description}</div>
-                )}
-                {hoveredNode.examFrequency && (
-                  <div className="text-xs text-dark-300">考试频率: {hoveredNode.examFrequency}</div>
+                {hoveredNode.isSubject ? (
+                  <div className="text-xs text-dark-300">
+                    包含 {hoveredNode.totalNodes} 个知识点 · 点击{expandedSubjects[hoveredNode.id] !== false ? '折叠' : '展开'}
+                  </div>
+                ) : (
+                  <>
+                    <div className="text-xs text-dark-300">
+                      状态: {hoveredNode.status === 'weak' ? '薄弱' : hoveredNode.status === 'mastered' ? '掌握' : hoveredNode.status}
+                    </div>
+                    {hoveredNode.description && (
+                      <div className="text-xs text-dark-300 mt-1 line-clamp-2">{hoveredNode.description}</div>
+                    )}
+                    {hoveredNode.examFrequency && (
+                      <div className="text-xs text-dark-300">考试频率: {hoveredNode.examFrequency}</div>
+                    )}
+                  </>
                 )}
               </div>
             )}
 
-            <button
-              onClick={handleResetView}
-              className="absolute bottom-4 right-4 px-3 py-1.5 bg-white border border-dark-200 rounded-lg text-xs font-medium text-dark-600 hover:bg-dark-50 transition-colors shadow-sm"
-            >
-              重置视图
-            </button>
+            <div className="graph-controls">
+              <button
+                onClick={handleZoomIn}
+                className="graph-control-btn"
+                title="放大"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v12m6-6H6" />
+                </svg>
+              </button>
+              <div className="graph-control-divider"></div>
+              <button
+                onClick={handleZoomOut}
+                className="graph-control-btn"
+                title="缩小"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18 12H6" />
+                </svg>
+              </button>
+              <div className="graph-control-divider"></div>
+              <button
+                onClick={handleResetView}
+                className="graph-control-btn"
+                title="重置视图"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                </svg>
+              </button>
+              <div className="graph-control-zoom-label">
+                {Math.round(zoomLevel * 100)}%
+              </div>
+            </div>
           </div>
-          
+
           <div className="dashboard-graph-legend">
             <div className="dashboard-graph-legend-item">
               <div className="dashboard-graph-legend-item-dot dashboard-graph-legend-item-dot-success"></div>
               <span className="text-sm text-dark-500 font-medium">掌握</span>
             </div>
             <div className="dashboard-graph-legend-item">
-              <div className="dashboard-graph-legend-item-dot dashboard-graph-legend-item-dot-warning"></div>
-              <span className="text-sm text-dark-500 font-medium">预警</span>
-            </div>
-            <div className="dashboard-graph-legend-item">
               <div className="dashboard-graph-legend-item-dot dashboard-graph-legend-item-dot-danger"></div>
               <span className="text-sm text-dark-500 font-medium">薄弱</span>
             </div>
+            <div className="flex-1"></div>
+            {subjects.map((subject) => {
+              const color = subjectColorMap[subject.id];
+              return (
+                <div key={subject.id} className="dashboard-graph-legend-item">
+                  <div
+                    className="w-3 h-3 rounded-full flex-shrink-0"
+                    style={{ background: color.bg }}
+                  ></div>
+                  <span className="text-xs text-dark-500 font-medium">{subject.name}</span>
+                </div>
+              );
+            })}
           </div>
         </div>
 
@@ -659,7 +864,7 @@ const Dashboard = () => {
                   <h4 className="text-xl font-bold text-dark-800">{selectedNode.name}</h4>
                   <div className="flex items-center gap-2 mt-2">
                     <span className={`w-3 h-3 rounded-full ${getNodeColorClass(selectedNode.status)} animate-pulse-soft`}></span>
-                    <span className={`text-sm font-medium ${getStatusTextColor(selectedNode.status)}`}>{selectedNode.status === 'weak' ? '薄弱' : selectedNode.status === 'warning' ? '预警' : selectedNode.status === 'mastered' ? '掌握' : selectedNode.status}</span>
+                    <span className={`text-sm font-medium ${getStatusTextColor(selectedNode.status)}`}>{selectedNode.status === 'weak' ? '薄弱' : selectedNode.status === 'mastered' ? '掌握' : selectedNode.status}</span>
                   </div>
                 </div>
                 {(selectedNode.status === '薄弱' || selectedNode.status === 'weak') && (
@@ -748,16 +953,15 @@ const Dashboard = () => {
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
                 </svg>
               </div>
-              <h4 className="text-lg font-semibold text-dark-600 mb-2">选择薄弱知识点</h4>
-              <p className="text-sm text-dark-400 max-w-xs">点击左侧知识图谱中的红色节点，查看该知识点的详细分析和推荐资源</p>
+              <h3 className="text-lg font-semibold text-dark-600 mb-2">选择知识点查看详情</h3>
+              <p className="text-sm text-dark-400">点击知识图谱中的知识点节点，查看详细分析和学习建议</p>
             </div>
           )}
         </div>
-
+      </div>
+      )}
     </div>
-    )}
-  </div>
-);
+  );
 };
 
 export default Dashboard;

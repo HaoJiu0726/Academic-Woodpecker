@@ -17,7 +17,6 @@ from app.models.base import Base, TimestampMixin
 
 class KnowledgeStatus(str, enum.Enum):
     掌握 = "掌握"
-    预警 = "预警"
     薄弱 = "薄弱"
 
 
