@@ -1,0 +1,53 @@
+// Global Styles Entry
+// Import custom SASS styles first (SASS requirement: @use must come before other rules)
+@use './variables';
+@use './mixins';
+@use './base';
+@use './components';
+@use './layout';
+
+// Import page-specific styles
+@use './pages/dashboard';
+@use './pages/analysis';
+@use './pages/resource';
+@use './pages/mentor';
+
+// Then import Tailwind CSS
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+// Custom scrollbar for the entire app
+* {
+  scrollbar-width: thin;
+  scrollbar-color: #cbd5e1 transparent;
+}
+
+*::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+*::-webkit-scrollbar-thumb {
+  background-color: #cbd5e1;
+  border-radius: 4px;
+}
+
+*::-webkit-scrollbar-thumb:hover {
+  background-color: #94a3b8;
+}
+
+// Selection color
+::selection {
+  background-color: rgba(14, 165, 233, 0.2);
+}
+
+// Focus visible for accessibility
+:focus-visible {
+  outline: 2px solid #0ea5e9;
+  outline-offset: 2px;
+}

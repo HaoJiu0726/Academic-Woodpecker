@@ -1,0 +1,196 @@
+// Responsive Mixins
+@mixin sm {
+  @media (min-width: 640px) {
+    @content;
+  }
+}
+
+@mixin md {
+  @media (min-width: 768px) {
+    @content;
+  }
+}
+
+@mixin lg {
+  @media (min-width: 1024px) {
+    @content;
+  }
+}
+
+@mixin xl {
+  @media (min-width: 1280px) {
+    @content;
+  }
+}
+
+// Flexbox Mixins
+@mixin flex-center {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+@mixin flex-between {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+@mixin flex-start {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+}
+
+@mixin flex-col {
+  display: flex;
+  flex-direction: column;
+}
+
+// Card Style Mixin
+@mixin card-base {
+  background: rgba(255, 255, 255, 0.8);
+  backdrop-filter: blur(20px);
+  border-radius: 1rem;
+  box-shadow: 0 2px 15px -3px rgba(0, 0, 0, 0.07), 0 10px 20px -2px rgba(0, 0, 0, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.5);
+  overflow: hidden;
+  transition: all 0.5s ease;
+
+  &:hover {
+    box-shadow: 0 10px 40px -10px rgba(0, 0, 0, 0.1), 0 20px 25px -5px rgba(0, 0, 0, 0.05);
+    transform: translateY(-0.5rem);
+  }
+}
+
+// Button Style Mixin
+@mixin button-base {
+  padding: 1rem 1.5rem;
+  border-radius: 1rem;
+  font-weight: 600;
+  transition: all 0.3s ease;
+  cursor: pointer;
+  border: none;
+  outline: none;
+
+  &:hover {
+    transform: translateY(-0.125rem);
+  }
+
+  &:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+    transform: none;
+  }
+}
+
+// Gradient Background Mixin
+@mixin gradient-primary {
+  background: linear-gradient(135deg, #0284c7 0%, #0ea5e9 100%);
+}
+
+@mixin gradient-secondary {
+  background: linear-gradient(135deg, #9333ea 0%, #a855f7 100%);
+}
+
+@mixin gradient-warning {
+  background: linear-gradient(135deg, #d97706 0%, #f59e0b 100%);
+}
+
+// Glass Effect Mixin
+@mixin glass-effect {
+  background: rgba(255, 255, 255, 0.8);
+  backdrop-filter: blur(20px);
+  border: 1px solid rgba(255, 255, 255, 0.5);
+}
+
+// Text Gradient Mixin
+@mixin text-gradient($color-start, $color-end) {
+  background: linear-gradient(135deg, $color-start, $color-end);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+// Animation Mixins
+@mixin animate-float {
+  animation: float 3s ease-in-out infinite;
+}
+
+@mixin animate-pulse {
+  animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+@mixin animate-pulse-soft {
+  animation: pulseSoft 2s ease-in-out infinite;
+}
+
+@mixin animate-pulse-slow {
+  animation: pulseSlow 4s ease-in-out infinite;
+}
+
+@mixin animate-pulse-soft-warning {
+  animation: pulseSoftWarning 2.5s ease-in-out infinite;
+}
+
+@mixin animate-fade-in {
+  animation: fadeIn 0.5s ease-out;
+}
+
+@mixin animate-fade-in-up {
+  animation: fadeInUp 0.5s ease-out;
+}
+
+@mixin animate-shimmer {
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    rgba(255, 255, 255, 0.4) 50%,
+    transparent 100%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 2s linear infinite;
+}
+
+// Scrollbar Mixin
+@mixin custom-scrollbar {
+  &::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+
+  &::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  &::-webkit-scrollbar-thumb {
+    background-color: #cbd5e1;
+    border-radius: 4px;
+
+    &:hover {
+      background-color: #94a3b8;
+    }
+  }
+}
+
+// Truncate Text Mixin
+@mixin truncate-text($lines: 1) {
+  @if $lines == 1 {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  } @else {
+    display: -webkit-box;
+    -webkit-line-clamp: $lines;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+}
+
+// Focus Ring Mixin
+@mixin focus-ring {
+  &:focus {
+    outline: none;
+    box-shadow: 0 0 0 3px rgba(14, 165, 233, 0.5);
+  }
+}
