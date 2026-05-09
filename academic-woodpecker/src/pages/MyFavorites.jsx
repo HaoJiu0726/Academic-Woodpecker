@@ -3,6 +3,14 @@ import { useNavigate } from 'react-router-dom';
 import '../ResourceHub.scss';
 import { resourcesApi, analysisApi } from '../api';
 
+const PLATFORM_STYLES = {
+  'B站': { color: '#FB7299', icon: '🎬' },
+  'Virtual Online Judge': { color: '#4CAF50', icon: '💻' },
+  'CSDN': { color: '#FC5531', icon: '📝' },
+};
+
+const getPlatformStyle = (platform) => PLATFORM_STYLES[platform] || { color: '#0ea5e9', icon: '📚' };
+
 const MyFavorites = () => {
   const navigate = useNavigate();
   const [favorites, setFavorites] = useState([]);
@@ -23,22 +31,34 @@ const MyFavorites = () => {
     setIsLoading(true);
     try {
       if (activeTab === 'resources') {
-        const response = await resourcesApi.getFavorites();
-        if (response.data && response.data.resources) {
-          const formattedFavorites = response.data.resources.map(r => ({
+        const [resourceRes, recFavRes] = await Promise.all([
+          resourcesApi.getFavorites(),
+          resourcesApi.getRecommendedFavorites(),
+        ]);
+        const favList = [];
+        let totalCount = 0;
+        if (resourceRes.data && resourceRes.data.resources) {
+          favList.push(...resourceRes.data.resources.map(r => ({
             ...r,
-            type: 'resource'
-          }));
-          setFavorites(formattedFavorites);
-          setTotal(response.data.total || 0);
-          setTotalPages(Math.ceil((response.data.total || 0) / pageSize));
-          const favoriteIds = new Set(response.data.resources.map(r => r.id));
-          setLocalFavorites(favoriteIds);
-        } else {
-          setFavorites([]);
-          setTotal(0);
-          setTotalPages(1);
+            type: 'resource',
+            favType: 'db',
+          })));
+          totalCount += resourceRes.data.total || 0;
         }
+        if (recFavRes.data && recFavRes.data.resources) {
+          favList.push(...recFavRes.data.resources.map(r => ({
+            ...r,
+            id: r.id || r.recId,
+            type: r.type || 'article',
+            favType: 'recommended',
+          })));
+          totalCount += recFavRes.data.total || 0;
+        }
+        setFavorites(favList);
+        setTotal(totalCount);
+        setTotalPages(Math.max(1, Math.ceil(totalCount / pageSize)));
+        const favoriteIds = new Set(favList.map(r => r.id));
+        setLocalFavorites(favoriteIds);
       } else {
         const response = await analysisApi.getFavoriteDocuments();
         if (response.data && response.data.documents) {
@@ -77,6 +97,26 @@ const MyFavorites = () => {
         const response = await analysisApi.toggleDocumentFavorite(id);
         if (response.data) {
           if (!response.data.favorited) {
+            setFavorites(prev => prev.filter(r => r.id !== id));
+            setTotal(prev => Math.max(0, prev - 1));
+            const newLocalFavorites = new Set(localFavorites);
+            newLocalFavorites.delete(id);
+            setLocalFavorites(newLocalFavorites);
+          }
+        }
+      } else if (favoriteType === 'recommended') {
+        const resource = favorites.find(r => r.id === id);
+        if (resource) {
+          const response = await resourcesApi.toggleRecommendedFavorite({
+            recId: resource.id,
+            title: resource.title,
+            platform: resource.platform || '未知',
+            type: resource.type || 'article',
+            difficulty: resource.difficulty || '入门',
+            reason: resource.reason || '',
+            url: resource.url || '',
+          });
+          if (response.data && !response.data.favorited) {
             setFavorites(prev => prev.filter(r => r.id !== id));
             setTotal(prev => Math.max(0, prev - 1));
             const newLocalFavorites = new Set(localFavorites);
@@ -353,19 +393,23 @@ const MyFavorites = () => {
               }
 
               const display = getResourceDisplay(resource);
+              const pStyle = getPlatformStyle(resource.platform);
               return (
                 <div
                   key={display.id}
                   className="group bg-white/80 backdrop-blur-xl rounded-2xl shadow-soft overflow-hidden border border-white/50 hover:shadow-medium transition-all duration-300 hover:-translate-y-1"
                 >
-                  <div className="h-2 bg-gradient-to-r from-rose-500 via-rose-400 to-rose-500"></div>
+                  <div className="h-2" style={{ background: `linear-gradient(to right, ${pStyle.color}, ${pStyle.color}cc)` }}></div>
                   <div className="p-6">
                     <div className="flex items-start justify-between mb-4">
-                      <div className={`px-3 py-1 rounded-lg text-xs font-semibold bg-gradient-to-r ${display.platformColor} text-white`}>
-                        {display.platform}
+                      <div
+                        className="px-3 py-1 rounded-lg text-xs font-semibold text-white"
+                        style={{ background: `linear-gradient(135deg, ${pStyle.color}, ${pStyle.color}bb)` }}
+                      >
+                        {pStyle.icon} {display.platform}
                       </div>
                       <button
-                        onClick={(e) => handleToggleFavorite(display.id, e, 'resource')}
+                        onClick={(e) => handleToggleFavorite(display.id, e, resource.favType || 'resource')}
                         className={`w-8 h-8 rounded-lg flex items-center justify-center transition-all duration-300 ${isFavorited ? 'bg-rose-100 text-rose-500' : 'bg-dark-100 text-dark-400 hover:bg-rose-50 hover:text-rose-500'}`}
                       >
                         <svg className="w-4 h-4" fill={isFavorited ? 'currentColor' : 'none'} stroke="currentColor" viewBox="0 0 24 24">
@@ -374,34 +418,25 @@ const MyFavorites = () => {
                       </button>
                     </div>
 
-                    <div className="flex items-center gap-1 mb-3">
-                      <svg className="w-4 h-4 text-warning-500" fill="currentColor" viewBox="0 0 20 20">
-                        <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
-                      </svg>
-                      <span className="text-sm font-bold text-dark-700">{display.rating}</span>
-                      <span className="text-xs text-dark-400 ml-2">{display.viewCount} 浏览</span>
-                    </div>
-
                     <h3 className="text-lg font-bold text-dark-800 mb-3 line-clamp-2 group-hover:text-rose-600 transition-colors duration-300">{display.title}</h3>
 
                     <div className="flex items-center gap-2 mb-4">
                       <span className={`px-2.5 py-1 text-xs font-medium rounded-full border ${getDifficultyColor(display.difficulty)}`}>
                         {display.difficulty}
                       </span>
-                      <span className="text-xs text-dark-400">{display.type}</span>
+                      <span
+                        className="px-2.5 py-1 text-xs font-medium rounded-full border"
+                        style={{ color: pStyle.color, borderColor: `${pStyle.color}44`, backgroundColor: `${pStyle.color}11` }}
+                      >
+                        {display.type}
+                      </span>
                     </div>
 
-                    <div className="p-4 bg-gradient-to-br from-dark-50 to-dark-100/50 rounded-xl mb-4">
-                      <p className="text-sm text-dark-600 leading-relaxed line-clamp-3">{display.reason}</p>
-                    </div>
-
-                    <div className="flex flex-wrap gap-2 mb-4">
-                      {display.tags.map((tag, index) => (
-                        <span key={index} className="px-2 py-1 text-xs text-dark-500 bg-dark-100 rounded-md">
-                          {tag}
-                        </span>
-                      ))}
-                    </div>
+                    {display.reason && (
+                      <div className="p-4 rounded-xl mb-4" style={{ backgroundColor: `${pStyle.color}08`, border: `1px solid ${pStyle.color}18` }}>
+                        <p className="text-sm text-dark-600 leading-relaxed line-clamp-3">{display.reason}</p>
+                      </div>
+                    )}
 
                     <div className="flex gap-2">
                       <button
@@ -415,8 +450,8 @@ const MyFavorites = () => {
                           href={display.url}
                           target="_blank"
                           rel="noopener noreferrer"
-                          onClick={(e) => e.stopPropagation()}
-                          className="flex-1 py-3 bg-gradient-to-r from-rose-500 to-rose-600 text-white font-semibold rounded-xl hover:from-rose-600 hover:to-rose-700 transition-all duration-300 shadow-lg shadow-rose-500/30 text-center"
+                          className="flex-1 py-3 text-white font-semibold rounded-xl text-center transition-all duration-300 shadow-lg"
+                          style={{ background: `linear-gradient(135deg, ${pStyle.color}, ${pStyle.color}cc)`, boxShadow: `0 4px 14px ${pStyle.color}44` }}
                         >
                           前往学习
                         </a>
@@ -438,8 +473,11 @@ const MyFavorites = () => {
             <div className="sticky top-0 bg-white border-b border-dark-100 p-6 flex items-start justify-between">
               <div>
                 <div className="flex items-center gap-3 mb-2">
-                  <span className={`px-3 py-1 rounded-lg text-xs font-semibold bg-gradient-to-r ${selectedResource.platformColor} text-white`}>
-                    {selectedResource.platform}
+                  <span
+                    className="px-3 py-1 rounded-lg text-xs font-semibold text-white"
+                    style={{ background: `linear-gradient(135deg, ${getPlatformStyle(selectedResource.platform).color}, ${getPlatformStyle(selectedResource.platform).color}bb)` }}
+                  >
+                    {getPlatformStyle(selectedResource.platform).icon} {selectedResource.platform}
                   </span>
                   <span className="text-sm text-dark-400">{selectedResource.type}</span>
                 </div>
@@ -447,7 +485,7 @@ const MyFavorites = () => {
               </div>
               <div className="flex items-center gap-2">
                 <button
-                  onClick={() => handleToggleFavorite(selectedResource.id)}
+                  onClick={() => handleToggleFavorite(selectedResource.id, null, selectedResource.favType || 'resource')}
                   className={`w-10 h-10 rounded-xl flex items-center justify-center transition-all duration-300 ${localFavorites.has(selectedResource.id) ? 'bg-rose-100 text-rose-500' : 'bg-dark-100 text-dark-400 hover:bg-rose-50 hover:text-rose-500'}`}
                 >
                   <svg className="w-5 h-5" fill={localFavorites.has(selectedResource.id) ? 'currentColor' : 'none'} stroke="currentColor" viewBox="0 0 24 24">
@@ -509,7 +547,8 @@ const MyFavorites = () => {
                   href={selectedResource.url}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="block w-full py-3 bg-gradient-to-r from-rose-500 to-rose-600 text-white rounded-xl font-semibold text-center hover:from-rose-600 hover:to-rose-700 transition-all duration-300 shadow-lg shadow-rose-500/30"
+                  className="block w-full py-3 text-white rounded-xl font-semibold text-center transition-all duration-300 shadow-lg"
+                  style={{ background: `linear-gradient(135deg, ${getPlatformStyle(selectedResource.platform).color}, ${getPlatformStyle(selectedResource.platform).color}cc)`, boxShadow: `0 4px 14px ${getPlatformStyle(selectedResource.platform).color}44` }}
                 >
                   前往学习
                 </a>

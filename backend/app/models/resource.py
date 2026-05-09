@@ -49,3 +49,17 @@ class UserFavorite(TimestampMixin, Base):
     resource_id: Mapped[int] = mapped_column(
         Integer, ForeignKey("resources.id"), nullable=False
     )
+
+
+class RecommendedFavorite(TimestampMixin, Base):
+    __tablename__ = "recommended_favorites"
+
+    user_id: Mapped[int] = mapped_column(Integer, ForeignKey("users.id"), nullable=False)
+    rec_id: Mapped[str] = mapped_column(String(100), nullable=False)
+    title: Mapped[str] = mapped_column(String(255), nullable=False)
+    platform: Mapped[str] = mapped_column(String(50), nullable=False)
+    type: Mapped[str] = mapped_column(String(20), nullable=False)
+    difficulty: Mapped[str] = mapped_column(String(20), nullable=True)
+    reason: Mapped[str] = mapped_column(Text, nullable=True)
+    url: Mapped[str] = mapped_column(String(500), nullable=True)
+    thumbnail: Mapped[str] = mapped_column(String(500), nullable=True)

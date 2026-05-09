@@ -32,6 +32,7 @@ export const api = {
   post: (endpoint, body, options = {}) => request(endpoint, { ...options, method: 'POST', body: JSON.stringify(body) }),
   put: (endpoint, body, options = {}) => request(endpoint, { ...options, method: 'PUT', body: JSON.stringify(body) }),
   delete: (endpoint, options = {}) => request(endpoint, { ...options, method: 'DELETE' }),
+  patch: (endpoint, body, options = {}) => request(endpoint, { ...options, method: 'PATCH', body: JSON.stringify(body) }),
   postFormData: (endpoint, formData, options = {}) => {
     const token = getToken();
     const headers = {};

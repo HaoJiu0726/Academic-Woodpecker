@@ -1,4 +1,4 @@
-from typing import List, Optional
+from typing import List, Optional, Union
 from pydantic import BaseModel
 from datetime import datetime
 
@@ -43,4 +43,4 @@ class SearchQuery(BaseModel):
 
 class FavoriteResponse(BaseModel):
     favorited: bool = True
-    resourceId: int
+    resourceId: Union[int, str]

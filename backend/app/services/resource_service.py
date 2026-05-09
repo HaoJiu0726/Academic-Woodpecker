@@ -1,7 +1,7 @@
 from typing import Optional, List
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, desc, or_, join
-from app.models.resource import Resource, UserFavorite
+from app.models.resource import Resource, UserFavorite, RecommendedFavorite
 from app.schemas.resource import ResourceItem, ResourceDetail, FavoriteResponse
 from fastapi import HTTPException
 
@@ -79,6 +79,97 @@ async def get_resources(
     }
 
 
+async def toggle_recommended_favorite(
+    db: AsyncSession,
+    user_id: int,
+    rec_id: str,
+    title: str,
+    platform: str,
+    rec_type: str,
+    difficulty: str = "入门",
+    reason: str = "",
+    url: str = "",
+    thumbnail: str = None,
+) -> FavoriteResponse:
+    result = await db.execute(
+        select(RecommendedFavorite).where(
+            RecommendedFavorite.user_id == user_id,
+            RecommendedFavorite.rec_id == rec_id,
+        )
+    )
+    fav = result.scalar_one_or_none()
+
+    if fav:
+        await db.delete(fav)
+        await db.commit()
+        return FavoriteResponse(favorited=False, resourceId=rec_id)
+    else:
+        new_fav = RecommendedFavorite(
+            user_id=user_id,
+            rec_id=rec_id,
+            title=title,
+            platform=platform,
+            type=rec_type,
+            difficulty=difficulty,
+            reason=reason,
+            url=url,
+            thumbnail=thumbnail,
+        )
+        db.add(new_fav)
+        await db.commit()
+        return FavoriteResponse(favorited=True, resourceId=rec_id)
+
+
+async def get_recommended_favorites(
+    db: AsyncSession, user_id: int, page: int = 1, page_size: int = 10
+) -> dict:
+    query = select(RecommendedFavorite).where(
+        RecommendedFavorite.user_id == user_id
+    )
+
+    count_query = select(func.count()).select_from(query.subquery())
+    result = await db.execute(count_query)
+    total = result.scalar() or 0
+
+    query = query.order_by(desc(RecommendedFavorite.created_at)).offset(
+        (page - 1) * page_size
+    ).limit(page_size)
+    result = await db.execute(query)
+    favs = result.scalars().all()
+
+    items = []
+    for fav in favs:
+        items.append({
+            "id": fav.rec_id,
+            "title": fav.title,
+            "platform": fav.platform,
+            "type": fav.type,
+            "difficulty": fav.difficulty,
+            "reason": fav.reason,
+            "url": fav.url,
+            "thumbnail": fav.thumbnail,
+        })
+
+    return {
+        "total": total,
+        "page": page,
+        "pageSize": page_size,
+        "resources": items,
+    }
+
+
+async def is_recommended_favorited(
+    db: AsyncSession, user_id: int, rec_id: str
+) -> bool:
+    result = await db.execute(
+        select(RecommendedFavorite).where(
+            RecommendedFavorite.user_id == user_id,
+            RecommendedFavorite.rec_id == rec_id,
+        )
+    )
+    return result.scalar_one_or_none() is not None
+
+
 async def get_resource_detail(db: AsyncSession, resource_id: int) -> ResourceDetail:
     """Get resource detail and increment view count."""
     resource = await db.get(Resource, resource_id)
@@ -112,7 +203,7 @@ async def search_resources(
     page: int = 1,
     page_size: int = 10,
 ) -> dict:
-    """Search resources by keyword in title, summary, or reason."""
+    """Search resources by keyword in title, summary, or reason, plus generate online results."""
     search_pattern = f"%{keyword}%"
     query = select(Resource).where(
         or_(
@@ -124,7 +215,7 @@ async def search_resources(
 
     count_query = select(func.count()).select_from(query.subquery())
     result = await db.execute(count_query)
-    total = result.scalar() or 0
+    db_total = result.scalar() or 0
 
     query = query.order_by(desc(Resource.rating)).offset((page - 1) * page_size).limit(page_size)
     result = await db.execute(query)
@@ -132,12 +223,36 @@ async def search_resources(
 
     items = [_to_resource_item(r) for r in resources]
 
+    online_items = _generate_online_search_results(keyword)
+    all_items = items + online_items
+
     return {
-        "total": total,
+        "total": db_total + len(online_items),
         "page": page,
         "pageSize": page_size,
-        "resources": [item.model_dump() for item in items],
+        "resources": [item.model_dump() for item in all_items[:page_size]],
     }
+
+
+def _generate_online_search_results(keyword: str) -> list:
+    from app.schemas.today import RecommendationItem
+    from app.services.today_service import TYPE_LABEL_MAP, PLATFORM_MAP
+
+    items = []
+    for r_type, (platform, url_base) in PLATFORM_MAP.items():
+        items.append(RecommendationItem(
+            id=f"search_{r_type}_{keyword[:10]}",
+            type=r_type,
+            typeLabel=TYPE_LABEL_MAP.get(r_type, "资源"),
+            difficulty="中级",
+            title=f"搜索「{keyword}」相关{TYPE_LABEL_MAP.get(r_type, '资源')}",
+            platform=platform,
+            duration=None,
+            reason=f"在{platform}上搜索与「{keyword}」相关的{TYPE_LABEL_MAP.get(r_type, '资源')}",
+            url=f"{url_base}{keyword}",
+            thumbnail=None,
+        ))
+    return items
 
 
 async def toggle_favorite(db: AsyncSession, user_id: int, resource_id: int) -> FavoriteResponse:

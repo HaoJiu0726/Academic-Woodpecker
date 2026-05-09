@@ -22,6 +22,18 @@ export const resourcesApi = {
   getFavorites: async () => {
     return api.get('/api/resources/favorites');
   },
+
+  toggleRecommendedFavorite: async (recData) => {
+    return api.post('/api/resources/recommended/favorite', recData);
+  },
+
+  getRecommendedFavorites: async () => {
+    return api.get('/api/resources/recommended/favorites');
+  },
+
+  getRecommendations: async () => {
+    return api.get('/api/today/recommendations');
+  },
 };
 
 export default resourcesApi;
