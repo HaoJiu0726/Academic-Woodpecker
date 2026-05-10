@@ -291,7 +291,7 @@ const Dashboard = () => {
     const nodePositions = {};
     const nodeSizes = {};
 
-    const subjectRadius = Math.min(35, 20 + subjectCount * 2);
+    const subjectRadius = Math.min(45, 20 + subjectCount * 2);
 
     subjects.forEach((subject, idx) => {
       const angle = (idx / subjectCount) * Math.PI * 2 - Math.PI / 2;
@@ -306,9 +306,9 @@ const Dashboard = () => {
       const nodeCount = visibleNodes.length;
       if (nodeCount === 0) return;
 
-      const nodeSize = nodeCount <= 3 ? 3.5 : nodeCount <= 6 ? 3 : nodeCount <= 10 ? 2.5 : 2;
-      const nodeRadius = Math.max(18, 12 + nodeCount * 2);
-      const angularSpread = Math.min(Math.PI, Math.max(0.4, nodeCount * 0.35));
+      const nodeSize = nodeCount <= 3 ? 4 : nodeCount <= 6 ? 3.5 : nodeCount <= 10 ? 3 : 2.5;
+      const nodeRadius = Math.max(38, 28 + nodeCount * 3.5);
+      const angularSpread = Math.min(Math.PI * 1.5, Math.max(0.8, nodeCount * 0.5));
       const startAngle = angle - angularSpread / 2;
 
       visibleNodes.forEach((node, ni) => {
@@ -327,27 +327,36 @@ const Dashboard = () => {
     });
 
     const allNodeIds = Object.keys(nodePositions);
-    const minDist = 9;
+    const subjectIdSet = new Set(subjects.map(s => s.id));
+    const minDist = 23;
 
-    for (let iter = 0; iter < 50; iter++) {
+    for (let iter = 0; iter < 110; iter++) {
       let moved = false;
       for (let i = 0; i < allNodeIds.length; i++) {
         const idA = allNodeIds[i];
         const posA = nodePositions[idA];
+        const isSubjectA = subjectIdSet.has(idA);
         for (let j = i + 1; j < allNodeIds.length; j++) {
           const idB = allNodeIds[j];
           const posB = nodePositions[idB];
+          const isSubjectB = subjectIdSet.has(idB);
           const dx = posB.x - posA.x;
           const dy = posB.y - posA.y;
           const dist = Math.sqrt(dx * dx + dy * dy);
-          if (dist < minDist && dist > 0.01) {
-            const overlap = (minDist - dist) / 2;
+          let effectiveMinDist = minDist;
+          if (isSubjectA && isSubjectB) {
+            effectiveMinDist = minDist * 2.0;
+          } else if (isSubjectA || isSubjectB) {
+            effectiveMinDist = minDist * 1.5;
+          }
+          if (dist < effectiveMinDist && dist > 0.01) {
+            const overlap = (effectiveMinDist - dist) / 2;
             const nx = dx / dist;
             const ny = dy / dist;
-            posA.x -= nx * overlap * 0.8;
-            posA.y -= ny * overlap * 0.8;
-            posB.x += nx * overlap * 0.8;
-            posB.y += ny * overlap * 0.8;
+            posA.x -= nx * overlap * 1.0;
+            posA.y -= ny * overlap * 1.0;
+            posB.x += nx * overlap * 1.0;
+            posB.y += ny * overlap * 1.0;
             moved = true;
           }
         }
@@ -375,7 +384,7 @@ const Dashboard = () => {
         const dx = pos.x - sPos.x;
         const dy = pos.y - sPos.y;
         const d = Math.sqrt(dx * dx + dy * dy);
-        const maxDist = 25;
+        const maxDist = 48;
         if (d > maxDist) {
           pos.x = sPos.x + (dx / d) * maxDist;
           pos.y = sPos.y + (dy / d) * maxDist;
@@ -813,6 +822,26 @@ const Dashboard = () => {
             )}
 
             <div className="graph-controls">
+              <button
+                onClick={() => fetchDashboardData(selectedStatus)}
+                className="graph-control-btn"
+                title="刷新知识图谱"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                </svg>
+              </button>
+              <div className="graph-control-divider"></div>
+              <button
+                onClick={expandAllSubjects}
+                className="graph-control-btn"
+                title="全局展开"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4" />
+                </svg>
+              </button>
+              <div className="graph-control-divider"></div>
               <button
                 onClick={handleZoomIn}
                 className="graph-control-btn"

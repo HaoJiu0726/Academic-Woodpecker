@@ -182,8 +182,7 @@ async def get_recommendations(
     user_profile = await build_user_document_profile(db, user_id)
     
     if not user_profile.get("keywords") and not user_profile.get("categories"):
-        # 如果没有足够的用户数据，返回热门资源
-        return await get_trending_resources(db, limit)
+        return []
     
     # 获取所有可用资源
     result = await db.execute(
@@ -233,9 +232,8 @@ async def get_trending_resources(db: AsyncSession, limit: int = 6) -> List[Dict]
     )
     resources = result.scalars().all()
     
-    # 如果数据库中没有资源，返回模拟数据
     if not resources:
-        return get_mock_resources(limit)
+        return []
     
     return [{
         "id": resource.id,

@@ -522,16 +522,23 @@
 
   &-label {
     position: absolute;
-    bottom: -1.4rem;
+    bottom: -1.8rem;
     left: 50%;
     transform: translateX(-50%);
-    font-size: 0.5rem;
+    font-size: 0.45rem;
     font-weight: 500;
     color: #64748b;
     white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 4rem;
     opacity: 0;
     transition: opacity 0.3s ease;
     pointer-events: none;
+    background: rgba(255, 255, 255, 0.85);
+    padding: 0.1rem 0.25rem;
+    border-radius: 0.15rem;
+    backdrop-filter: blur(2px);
 
     &-always {
       opacity: 1;
