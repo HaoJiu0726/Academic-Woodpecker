@@ -190,13 +190,13 @@ async def get_knowledge_graph(db: AsyncSession, user_id: int, status_filter: str
             for kw in keywords:
                 if kw in name:
                     return subject
-        return "未分类"
+        return "其他"
 
     # Group knowledge points by subject
     subjects = {}
     
     for kp in all_kps:
-        subject_name = kp.subject if kp.subject else "未分类"
+        subject_name = kp.subject if kp.subject else "其他"
         mapped = subject_mappings.get(subject_name)
         if mapped is None:
             subject_name = classify_by_name(kp.name)

@@ -338,7 +338,7 @@ const Dashboard = () => {
     if (!knowledgeGraph.length) return subjects;
     const categoryMap = new Map();
     knowledgeGraph.forEach(node => {
-      const cat = node.category || '未分类';
+      const cat = node.category || '其他';
       if (!categoryMap.has(cat)) {
         categoryMap.set(cat, { id: `cat-${cat}`, name: cat, nodes: [] });
       }
@@ -355,7 +355,9 @@ const Dashboard = () => {
     const nodePositions = {};
     const nodeSizes = {};
 
-    const subjectRadius = Math.min(42, 18 + subjectCount * 2);
+    const subjectRadius = isFullscreen
+      ? Math.min(42, 18 + subjectCount * 2)
+      : Math.min(55, 24 + subjectCount * 2.5);
 
     dynamicSubjects.forEach((subject, idx) => {
       const angle = (idx / subjectCount) * Math.PI * 2 - Math.PI / 2;
@@ -371,8 +373,12 @@ const Dashboard = () => {
       if (nodeCount === 0) return;
 
       const nodeSize = nodeCount <= 3 ? 4 : nodeCount <= 6 ? 3.5 : nodeCount <= 10 ? 3 : 2.5;
-      const nodeRadius = Math.max(165, 85 + nodeCount * 8);
-      const angularSpread = Math.min(Math.PI * 1.5, Math.max(1.0, nodeCount * 0.5));
+      const nodeRadius = isFullscreen
+        ? Math.max(165, 85 + nodeCount * 8)
+        : Math.max(220, 110 + nodeCount * 12);
+      const angularSpread = isFullscreen
+        ? Math.min(Math.PI * 1.5, Math.max(1.0, nodeCount * 0.5))
+        : Math.min(Math.PI * 2.0, Math.max(1.2, nodeCount * 0.7));
       const startAngle = angle - angularSpread / 2;
 
       visibleNodes.forEach((node, ni) => {
@@ -392,9 +398,10 @@ const Dashboard = () => {
 
     const allNodeIds = Object.keys(nodePositions);
     const subjectIdSet = new Set(dynamicSubjects.map(s => s.id));
-    const minDist = 45;
+    const minDist = isFullscreen ? 45 : 90;
+    const iterations = isFullscreen ? 150 : 350;
 
-    for (let iter = 0; iter < 150; iter++) {
+    for (let iter = 0; iter < iterations; iter++) {
       let moved = false;
       for (let i = 0; i < allNodeIds.length; i++) {
         const idA = allNodeIds[i];
@@ -411,16 +418,17 @@ const Dashboard = () => {
           if (isSubjectA && isSubjectB) {
             effectiveMinDist = minDist * 3.0;
           } else if (isSubjectA || isSubjectB) {
-            effectiveMinDist = minDist * 3.0 + 15;
+            effectiveMinDist = minDist * 2.5 + 20;
           }
           if (dist < effectiveMinDist && dist > 0.01) {
-            const overlap = (effectiveMinDist - dist) / 2;
+            const overlap = effectiveMinDist - dist;
             const nx = dx / dist;
             const ny = dy / dist;
-            posA.x -= nx * overlap * 1.1;
-            posA.y -= ny * overlap * 1.1;
-            posB.x += nx * overlap * 1.1;
-            posB.y += ny * overlap * 1.1;
+            const pushFactor = isFullscreen ? 1.0 : 1.5;
+            posA.x -= nx * overlap * pushFactor;
+            posA.y -= ny * overlap * pushFactor;
+            posB.x += nx * overlap * pushFactor;
+            posB.y += ny * overlap * pushFactor;
             moved = true;
           }
         }
@@ -459,7 +467,7 @@ const Dashboard = () => {
     }
 
     return { subjectPositions, nodePositions, nodeSizes };
-  }, [dynamicSubjects, filteredGraph, expandedSubjects]);
+  }, [dynamicSubjects, filteredGraph, expandedSubjects, isFullscreen]);
 
   const subjectColorMap = useMemo(() => {
     const map = {};
