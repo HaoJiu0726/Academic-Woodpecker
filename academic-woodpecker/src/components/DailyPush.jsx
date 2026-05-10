@@ -111,28 +111,6 @@ const DailyPush = () => {
     setIsLoading(true);
     setError(null);
 
-    const cachedRecs = getCachedData(CACHE_KEY_PREFIX + 'recommendations');
-    const cachedPush = getCachedData(CACHE_KEY_PREFIX + 'push');
-
-    if (cachedRecs && cachedPush) {
-      setRecommendations(cachedRecs.recommendations || []);
-      setHasKnowledgeData(cachedRecs.hasKnowledgeData || false);
-      setPushData(cachedPush);
-      setLastUpdateTime(new Date());
-
-      const [progressRes, goalsRes] = await Promise.all([
-        todayApi.getProgress().catch(e => ({ data: null })),
-        todayApi.getGoals().catch(e => ({ data: null })),
-      ]);
-      if (progressRes.data) setProgress(progressRes.data);
-      if (goalsRes.data) {
-        setGoals(goalsRes.data.todayGoals || []);
-        setStudyTips(goalsRes.data.studyTips || []);
-      }
-      setIsLoading(false);
-      return;
-    }
-
     try {
       const [pushRes, recRes, progressRes, goalsRes] = await Promise.all([
         todayApi.getPush().catch(e => ({ data: null })),
@@ -261,39 +239,10 @@ const DailyPush = () => {
         const updated = prev.map(goal =>
           goal.id === goalId ? { ...goal, completed: !goal.completed } : goal
         );
-        const toggledGoal = prev.find(g => g.id === goalId);
-        if (toggledGoal && !toggledGoal.completed) {
-          recordGoalStudyTime(toggledGoal.estimatedMinutes);
-        } else if (toggledGoal && toggledGoal.completed) {
-          recordGoalStudyTime(-toggledGoal.estimatedMinutes);
-        }
         return updated;
       });
     } catch (error) {
       console.error('更新目标失败:', error);
-    }
-  };
-
-  const recordGoalStudyTime = async (minutes) => {
-    try {
-      await todayApi.startStudy();
-      if (progress) {
-        const todayDow = new Date().getDay();
-        const adjustedDow = todayDow === 0 ? 6 : todayDow - 1;
-        setProgress(prev => {
-          if (!prev) return prev;
-          const newTrend = prev.weeklyTrend.map((item, idx) => {
-            if (idx === adjustedDow) {
-              return { ...item, hours: Math.round((item.hours + minutes / 60) * 10) / 10 };
-            }
-            return item;
-          });
-          const totalHours = Math.round(newTrend.reduce((sum, item) => sum + item.hours, 0) * 10) / 10;
-          return { ...prev, weeklyStudyHours: totalHours, weeklyTrend: newTrend };
-        });
-      }
-    } catch (error) {
-      console.error('记录学习时长失败:', error);
     }
   };
 
@@ -358,11 +307,7 @@ const DailyPush = () => {
   };
 
   const handleMainStartLearning = () => {
-    if (hasKnowledgeData) {
-      navigate('/resources');
-    } else {
-      navigate('/analysis');
-    }
+    navigate('/resources');
   };
 
   const handleShowHistory = () => {

@@ -631,9 +631,18 @@ async def get_today_goals(db: AsyncSession, user_id: int) -> TodayGoalsData:
     has_knowledge = len(user_kp_rows) > 0
 
     today = datetime.now().strftime("%Y-%m-%d")
+    today_start = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
+    today_end = datetime.now().replace(hour=23, minute=59, second=59, microsecond=999999)
+
     existing_goals_result = await db.execute(
         select(UserGoal)
-        .where(UserGoal.user_id == user_id)
+        .where(
+            and_(
+                UserGoal.user_id == user_id,
+                UserGoal.goal_date >= today_start,
+                UserGoal.goal_date <= today_end,
+            )
+        )
         .order_by(UserGoal.created_at.asc())
     )
     existing_goals = existing_goals_result.scalars().all()
@@ -678,7 +687,13 @@ async def get_today_goals(db: AsyncSession, user_id: int) -> TodayGoalsData:
 
     existing_goals_result = await db.execute(
         select(UserGoal)
-        .where(UserGoal.user_id == user_id)
+        .where(
+            and_(
+                UserGoal.user_id == user_id,
+                UserGoal.goal_date >= today_start,
+                UserGoal.goal_date <= today_end,
+            )
+        )
         .order_by(UserGoal.created_at.asc())
     )
     all_goals = existing_goals_result.scalars().all()

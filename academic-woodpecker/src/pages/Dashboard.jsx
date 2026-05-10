@@ -95,6 +95,17 @@ const Dashboard = () => {
     };
   }, []);
 
+  useEffect(() => {
+    const CACHE_KEY_PREFIX = 'daily_push_cache_';
+    const handleAnalysisUploadComplete = () => {
+      localStorage.removeItem(CACHE_KEY_PREFIX + 'recommendations');
+      localStorage.removeItem(CACHE_KEY_PREFIX + 'push');
+      fetchDashboardData();
+    };
+    window.addEventListener('analysis:uploadComplete', handleAnalysisUploadComplete);
+    return () => window.removeEventListener('analysis:uploadComplete', handleAnalysisUploadComplete);
+  }, []);
+
   const fetchDashboardData = async (statusFilter = null) => {
     setIsLoading(true);
     try {

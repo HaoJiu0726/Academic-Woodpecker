@@ -66,6 +66,7 @@ const MyFavorites = () => {
             id: d.id,
             title: d.fileName,
             type: 'document',
+            favType: 'document',
             uploadTime: d.uploadTime,
             status: d.status,
             platform: '我的文件'
