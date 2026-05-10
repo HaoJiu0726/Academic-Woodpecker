@@ -234,13 +234,18 @@ const DailyPush = () => {
 
   const handleGoalToggle = async (goalId) => {
     try {
-      await todayApi.updateGoal(goalId);
+      const updateRes = await todayApi.updateGoal(goalId);
       setGoals(prev => {
         const updated = prev.map(goal =>
           goal.id === goalId ? { ...goal, completed: !goal.completed } : goal
         );
         return updated;
       });
+      await new Promise(resolve => setTimeout(resolve, 500));
+      const progressRes = await todayApi.getProgress();
+      if (progressRes?.data) {
+        setProgress(progressRes.data);
+      }
     } catch (error) {
       console.error('更新目标失败:', error);
     }
@@ -952,7 +957,7 @@ const DailyPush = () => {
                   <span className="daily-push-progress-label">较上周增长</span>
                   <span className="daily-push-progress-value success">
                     {progress?.weeklyGrowthRate !== undefined
-                      ? `${(progress.weeklyGrowthRate * 100).toFixed(0)}%`
+                      ? `${(Math.max(progress.weeklyGrowthRate, 0) * 100).toFixed(0)}%`
                       : '+25%'}
                   </span>
                 </div>

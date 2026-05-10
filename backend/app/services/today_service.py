@@ -76,6 +76,7 @@ async def _get_weekly_duration(db: AsyncSession, user_id: int, offset: int = 0) 
         )
     )
     total_seconds = result.scalar() or 0
+    logger.info(f"_get_weekly_duration: user_id={user_id}, offset={offset}, start={start}, end={end}, total_seconds={total_seconds}")
     return round(total_seconds / 3600, 1)
 
 
@@ -799,6 +800,7 @@ async def toggle_goal_completed(db: AsyncSession, user_id: int, goal_id: str) ->
     try:
         parts = goal_id.split("_")
         if len(parts) < 3 or parts[0] != "goal" or parts[1] != "custom":
+            logger.warning(f"toggle_goal_completed: invalid goal_id format: {goal_id}")
             return False
         custom_id = int(parts[2])
         result = await db.execute(
@@ -808,18 +810,23 @@ async def toggle_goal_completed(db: AsyncSession, user_id: int, goal_id: str) ->
         )
         goal = result.scalar_one_or_none()
         if not goal:
+            logger.warning(f"toggle_goal_completed: goal not found: custom_id={custom_id}, user_id={user_id}")
             return False
         was_completed = goal.completed
         goal.completed = not goal.completed
+        logger.info(f"toggle_goal_completed: goal_id={goal_id}, was_completed={was_completed}, now_completed={goal.completed}, estimated_minutes={goal.estimated_minutes}")
         if goal.completed and not was_completed:
+            duration_seconds = goal.estimated_minutes * 60 if goal.estimated_minutes else 0
             record = UserLearningRecord(
                 user_id=user_id,
                 action=LearningAction.completed,
                 content=goal.title,
-                duration_seconds=goal.estimated_minutes * 60,
+                duration_seconds=duration_seconds,
             )
             db.add(record)
+            logger.info(f"toggle_goal_completed: created learning record with duration_seconds={duration_seconds}")
         await db.commit()
         return True
-    except (ValueError, IndexError):
+    except (ValueError, IndexError) as e:
+        logger.error(f"toggle_goal_completed: error: {e}")
         return False

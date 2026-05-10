@@ -152,13 +152,13 @@ const Dashboard = () => {
 
   const expandAllSubjects = () => {
     const allExpanded = {};
-    subjects.forEach(s => { allExpanded[s.id] = true; });
+    dynamicSubjects.forEach(s => { allExpanded[s.id] = true; });
     setExpandedSubjects(allExpanded);
   };
 
   const collapseAllSubjects = () => {
     const allCollapsed = {};
-    subjects.forEach(s => { allCollapsed[s.id] = false; });
+    dynamicSubjects.forEach(s => { allCollapsed[s.id] = false; });
     setExpandedSubjects(allCollapsed);
   };
 
@@ -371,7 +371,7 @@ const Dashboard = () => {
       if (nodeCount === 0) return;
 
       const nodeSize = nodeCount <= 3 ? 4 : nodeCount <= 6 ? 3.5 : nodeCount <= 10 ? 3 : 2.5;
-      const nodeRadius = Math.max(48, 38 + nodeCount * 4.5);
+      const nodeRadius = Math.max(70, 55 + nodeCount * 6);
       const angularSpread = Math.min(Math.PI * 1.5, Math.max(0.8, nodeCount * 0.5));
       const startAngle = angle - angularSpread / 2;
 
@@ -392,7 +392,7 @@ const Dashboard = () => {
 
     const allNodeIds = Object.keys(nodePositions);
     const subjectIdSet = new Set(dynamicSubjects.map(s => s.id));
-    const minDist = 28;
+    const minDist = 35;
 
     for (let iter = 0; iter < 150; iter++) {
       let moved = false;
@@ -409,9 +409,9 @@ const Dashboard = () => {
           const dist = Math.sqrt(dx * dx + dy * dy);
           let effectiveMinDist = minDist;
           if (isSubjectA && isSubjectB) {
-            effectiveMinDist = minDist * 2.2;
+            effectiveMinDist = minDist * 2.5;
           } else if (isSubjectA || isSubjectB) {
-            effectiveMinDist = minDist * 1.7;
+            effectiveMinDist = minDist * 2.0;
           }
           if (dist < effectiveMinDist && dist > 0.01) {
             const overlap = (effectiveMinDist - dist) / 2;
@@ -913,16 +913,6 @@ const Dashboard = () => {
             )}
 
             <div className="graph-controls">
-              <button
-                onClick={expandAllSubjects}
-                className="graph-control-btn"
-                title="全局展开"
-              >
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4" />
-                </svg>
-              </button>
-              <div className="graph-control-divider"></div>
               <button
                 onClick={handleZoomIn}
                 className="graph-control-btn"
