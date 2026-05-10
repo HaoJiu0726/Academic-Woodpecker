@@ -1,5 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
+import { useSelector } from 'react-redux';
 import '../DailyPush.scss';
 import { todayApi, resourcesApi } from '../api';
 
@@ -41,6 +42,8 @@ const setCachedData = (key, data) => {
 const DailyPush = () => {
   const navigate = useNavigate();
   const location = useLocation();
+  const userId = useSelector((state) => state.user.userInfo?.id);
+  const prevUserIdRef = useRef(userId);
   const [activeTab, setActiveTab] = useState('recommendations');
   const [pushData, setPushData] = useState(null);
   const [recommendations, setRecommendations] = useState([]);
@@ -64,9 +67,24 @@ const DailyPush = () => {
   const [totalStudyMinutes, setTotalStudyMinutes] = useState(0);
 
   useEffect(() => {
+    if (prevUserIdRef.current !== userId) {
+      setRecommendations([]);
+      setHasKnowledgeData(false);
+      setPushData(null);
+      setProgress(null);
+      setGoals([]);
+      setStudyTips([]);
+      setPushHistory([]);
+      setFavorites(new Set());
+      setSelectedRecommendation(null);
+      setError(null);
+      localStorage.removeItem(CACHE_KEY_PREFIX + 'recommendations');
+      localStorage.removeItem(CACHE_KEY_PREFIX + 'push');
+      prevUserIdRef.current = userId;
+    }
     fetchAllData();
     fetchFavorites();
-  }, []);
+  }, [userId]);
 
   useEffect(() => {
     const params = new URLSearchParams(location.search);
@@ -324,7 +342,11 @@ const DailyPush = () => {
   };
 
   const handleMainStartLearning = () => {
-    navigate('/resources');
+    if (hasKnowledgeData) {
+      navigate('/resources');
+    } else {
+      navigate('/analysis');
+    }
   };
 
   const handleShowHistory = () => {
@@ -590,8 +612,8 @@ const DailyPush = () => {
                   </>
                 ) : (
                   <>
-                    <h3 className="text-xl font-bold text-amber-800 mb-3 relative z-10">暂无推荐内容</h3>
-                    <p className="text-amber-600 mb-6 relative z-10">上传成绩单或试卷后获取个性化推荐</p>
+                    <h3 className="text-xl font-bold text-amber-800 mb-3 relative z-10">请去上传资源</h3>
+                    <p className="text-amber-600 mb-6 relative z-10">上传成绩单或试卷后，即可获取个性化学习推荐</p>
                     <button
                       onClick={() => navigate('/analysis')}
                       className="px-6 py-3 bg-gradient-to-r from-amber-500 to-amber-600 text-white rounded-xl font-semibold hover:from-amber-600 hover:to-amber-700 transition-all duration-300 shadow-lg shadow-amber-500/30 flex items-center gap-2 relative z-10"
@@ -599,7 +621,7 @@ const DailyPush = () => {
                       <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
                       </svg>
-                      前往上传成绩单
+                      前往上传资源
                     </button>
                   </>
                 )}

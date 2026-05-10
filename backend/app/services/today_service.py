@@ -461,43 +461,8 @@ async def get_recommendations(
     has_knowledge = len(user_kp_rows) > 0
     has_resources = len(resources) > 0
 
-    if not has_knowledge and not has_resources:
-        mock_resources = get_mock_resources(6)
-        items: list[RecommendationItem] = []
-        for idx, r in enumerate(mock_resources):
-            r_type = r.get("resourceType", "article")
-            items.append(RecommendationItem(
-                id=f"mock_{idx}",
-                type=r_type,
-                typeLabel=TYPE_LABEL_MAP.get(r_type, "文章"),
-                difficulty=r.get("difficulty", "入门"),
-                title=r.get("title", ""),
-                platform=r.get("category", "系统"),
-                duration=None,
-                reason=r.get("reason", "热门推荐"),
-                url=r.get("url", ""),
-                thumbnail=r.get("thumbnail"),
-            ))
-        return TodayRecommendationsData(recommendations=items, hasKnowledgeData=False)
-
     if not has_knowledge:
-        trending_resources = await get_trending_resources(db, 6)
-        items: list[RecommendationItem] = []
-        for idx, r in enumerate(trending_resources):
-            r_type = r.get("resourceType", "article")
-            items.append(RecommendationItem(
-                id=f"trend_{idx}",
-                type=r_type,
-                typeLabel=TYPE_LABEL_MAP.get(r_type, "文章"),
-                difficulty=r.get("difficulty", "入门"),
-                title=r.get("title", ""),
-                platform=r.get("category", "系统"),
-                duration=None,
-                reason=r.get("reason", "热门推荐"),
-                url=r.get("url", ""),
-                thumbnail=r.get("thumbnail"),
-            ))
-        return TodayRecommendationsData(recommendations=items, hasKnowledgeData=False)
+        return TodayRecommendationsData(recommendations=[], hasKnowledgeData=False)
 
     user_kps = [{"name": row[0], "score": round(row[1], 1)} for row in user_kp_rows]
 

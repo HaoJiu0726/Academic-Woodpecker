@@ -141,6 +141,13 @@ async def get_knowledge_graph(db: AsyncSession, user_id: int, status_filter: str
     user_knowledge = {uk.knowledge_id: {'score': uk.score}
                       for uk in result.scalars().all()}
 
+    if not user_knowledge:
+        return {
+            "nodes": [],
+            "subjects": [],
+            "stats": {"total": 0, "mastered": 0, "weak": 0}
+        }
+
     # Define subject normalization mappings
     subject_mappings = {
         "通用": None,
@@ -202,17 +209,15 @@ async def get_knowledge_graph(db: AsyncSession, user_id: int, status_filter: str
         # Get user's score
         uk_data = user_knowledge.get(kp.id)
         score = uk_data['score'] if uk_data else None
+
+        if score is None:
+            continue
         
         # Determine status based on score
-        if score is not None:
-            if score >= 80:
-                status, color = "掌握", "emerald"
-            else:
-                status, color = "薄弱", "rose"
+        if score >= 80:
+            status, color = "掌握", "emerald"
         else:
-            status = kp.status.value if hasattr(kp.status, "value") else kp.status
-            color_map = {"掌握": "emerald", "薄弱": "rose"}
-            color = color_map.get(status, "gray")
+            status, color = "薄弱", "rose"
 
         # Apply status filter if specified
         if status_filter and status != status_filter:

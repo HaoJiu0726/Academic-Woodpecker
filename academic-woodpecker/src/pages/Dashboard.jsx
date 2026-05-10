@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useSelector } from 'react-redux';
 import '../Dashboard.scss';
 import DailyPush from '../components/DailyPush';
 import { dashboardApi } from '../api';
@@ -17,6 +18,7 @@ const SUBJECT_COLORS = [
 
 const Dashboard = () => {
   const navigate = useNavigate();
+  const userId = useSelector((state) => state.user.userInfo?.id);
   const [selectedNode, setSelectedNode] = useState(null);
   const [animatedProgress, setAnimatedProgress] = useState(0);
   const [activeView, setActiveView] = useState('analysis');
@@ -38,10 +40,23 @@ const Dashboard = () => {
   const [zoomLevel, setZoomLevel] = useState(1);
   const [isDetailLoading, setIsDetailLoading] = useState(false);
   const graphContainerRef = useRef(null);
+  const prevUserIdRef = useRef(userId);
 
   useEffect(() => {
+    if (prevUserIdRef.current !== userId) {
+      setKnowledgeGraph([]);
+      setSubjects([]);
+      setExpandedSubjects({});
+      setSelectedNode(null);
+      setSelectedStatus(null);
+      setOverviewData({ knowledgeRate: 0, docCount: 0, lastDiagnosis: null });
+      setAnimatedProgress(0);
+      setGraphOffset({ x: 0, y: 0 });
+      setZoomLevel(1);
+      prevUserIdRef.current = userId;
+    }
     fetchDashboardData();
-  }, []);
+  }, [userId]);
 
   useEffect(() => {
     if (overviewData?.knowledgeRate && overviewData.knowledgeRate > 0) {
@@ -292,8 +307,8 @@ const Dashboard = () => {
       if (nodeCount === 0) return;
 
       const nodeSize = nodeCount <= 3 ? 3.5 : nodeCount <= 6 ? 3 : nodeCount <= 10 ? 2.5 : 2;
-      const nodeRadius = Math.max(14, 10 + nodeCount * 1.5);
-      const angularSpread = Math.min(Math.PI, Math.max(0.3, nodeCount * 0.3));
+      const nodeRadius = Math.max(18, 12 + nodeCount * 2);
+      const angularSpread = Math.min(Math.PI, Math.max(0.4, nodeCount * 0.35));
       const startAngle = angle - angularSpread / 2;
 
       visibleNodes.forEach((node, ni) => {
@@ -312,9 +327,9 @@ const Dashboard = () => {
     });
 
     const allNodeIds = Object.keys(nodePositions);
-    const minDist = 6;
+    const minDist = 9;
 
-    for (let iter = 0; iter < 30; iter++) {
+    for (let iter = 0; iter < 50; iter++) {
       let moved = false;
       for (let i = 0; i < allNodeIds.length; i++) {
         const idA = allNodeIds[i];
@@ -329,10 +344,10 @@ const Dashboard = () => {
             const overlap = (minDist - dist) / 2;
             const nx = dx / dist;
             const ny = dy / dist;
-            posA.x -= nx * overlap * 0.6;
-            posA.y -= ny * overlap * 0.6;
-            posB.x += nx * overlap * 0.6;
-            posB.y += ny * overlap * 0.6;
+            posA.x -= nx * overlap * 0.8;
+            posA.y -= ny * overlap * 0.8;
+            posB.x += nx * overlap * 0.8;
+            posB.y += ny * overlap * 0.8;
             moved = true;
           }
         }
@@ -668,96 +683,105 @@ const Dashboard = () => {
                 const color = subjectColorMap[subject.id];
                 const isExpanded = expandedSubjects[subject.id] !== false;
                 const categoryNodes = filteredGraph.filter(n => n.category === subject.name);
+
+                return (
+                  isExpanded && categoryNodes.map(node => {
+                    const nPos = layoutData.nodePositions[node.id];
+                    if (!nPos) return null;
+                    const nSize = layoutData.nodeSizes?.[node.id] || 3;
+                    const sizeRem = `${nSize}rem`;
+
+                    return (
+                      <div
+                        key={node.id}
+                        className={`knowledge-node ${node.status === '薄弱' || node.status === 'weak' ? 'knowledge-node-weak' : ''}`}
+                        style={{
+                          top: `${nPos.y}%`,
+                          left: `${nPos.x}%`,
+                          transform: 'translate(-50%, -50%)'
+                        }}
+                        onClick={() => handleNodeClick(node)}
+                        onMouseEnter={(e) => handleNodeHover(node, e)}
+                        onMouseLeave={() => setHoveredNode(null)}
+                      >
+                        <div
+                          className={`knowledge-node-circle ${getNodeColorClass(node.status)} flex items-center justify-center shadow-lg transition-all duration-300 ${node.status === '薄弱' || node.status === 'weak' ? 'ring-4 ring-rose-200 animate-pulse-soft' : ''}`}
+                          style={{ width: sizeRem, height: sizeRem }}
+                        >
+                          <span
+                            className="text-white font-semibold px-1 text-center leading-tight"
+                            style={{
+                              fontSize: nSize <= 2.5 ? '0.5625rem' : nSize <= 3 ? '0.625rem' : '0.75rem',
+                              wordBreak: 'break-word',
+                              whiteSpace: 'normal',
+                              maxWidth: `${nSize * 2.5}rem`,
+                              overflow: 'hidden',
+                              textOverflow: 'ellipsis',
+                              display: '-webkit-box',
+                              WebkitLineClamp: 2,
+                              WebkitBoxOrient: 'vertical'
+                            }}
+                            title={node.name}
+                          >
+                            {node.name}
+                          </span>
+                        </div>
+                        <div className="knowledge-node-label knowledge-node-label-always">
+                          <span className={`text-xs font-medium ${getStatusTextColor(node.status)}`}>
+                            {node.status === 'weak' ? '薄弱' : node.status === 'mastered' ? '掌握' : node.status}
+                            {node.score !== undefined && node.score !== null && ` (${node.score}分)`}
+                          </span>
+                        </div>
+                        <div className={`knowledge-node-glow ${getNodeGlowClass(node.status)}`}></div>
+                      </div>
+                    );
+                  })
+                );
+              })}
+
+              {subjects.map((subject) => {
+                const sPos = layoutData.subjectPositions[subject.id];
+                if (!sPos) return null;
+                const color = subjectColorMap[subject.id];
+                const isExpanded = expandedSubjects[subject.id] !== false;
+                const categoryNodes = filteredGraph.filter(n => n.category === subject.name);
                 const nodeCount = categoryNodes.length;
                 const subjectSize = nodeCount <= 3 ? 5 : nodeCount <= 6 ? 5.5 : nodeCount <= 10 ? 6 : 6.5;
 
                 return (
-                  <React.Fragment key={`subject-${subject.id}`}>
+                  <div
+                    key={`subject-${subject.id}`}
+                    className="subject-node"
+                    style={{
+                      top: `${sPos.y}%`,
+                      left: `${sPos.x}%`,
+                      transform: 'translate(-50%, -50%)'
+                    }}
+                    onClick={() => toggleSubjectExpand(subject.id)}
+                    onMouseEnter={(e) => handleNodeHover({ ...subject, isSubject: true, name: subject.name, totalNodes: nodeCount }, e)}
+                    onMouseLeave={() => setHoveredNode(null)}
+                  >
                     <div
-                      className="subject-node"
-                      style={{
-                        top: `${sPos.y}%`,
-                        left: `${sPos.x}%`,
-                        transform: 'translate(-50%, -50%)'
-                      }}
-                      onClick={() => toggleSubjectExpand(subject.id)}
-                      onMouseEnter={(e) => handleNodeHover({ ...subject, isSubject: true, name: subject.name, totalNodes: nodeCount }, e)}
-                      onMouseLeave={() => setHoveredNode(null)}
+                      className="subject-node-circle"
+                      style={{ background: color.bg, width: `${subjectSize}rem`, height: `${subjectSize}rem` }}
                     >
-                      <div
-                        className="subject-node-circle"
-                        style={{ background: color.bg, width: `${subjectSize}rem`, height: `${subjectSize}rem` }}
-                      >
-                        <span className="text-white font-bold text-sm px-2 text-center leading-tight">
-                          {subject.name}
-                        </span>
-                      </div>
-                      <div className="subject-node-label">
-                        <span className="text-xs font-semibold text-dark-600">{nodeCount} 个知识点</span>
-                      </div>
-                      <div className="subject-node-badge" style={{ background: color.bg }}>
-                        <span className="text-white text-xs font-bold">
-                          {isExpanded ? '−' : '+'}
-                        </span>
-                      </div>
-                      <div
-                        className="subject-node-glow"
-                        style={{ background: `radial-gradient(circle, ${color.glow} 0%, transparent 70%)` }}
-                      ></div>
+                      <span className="text-white font-bold text-sm px-2 text-center leading-tight">
+                        {subject.name}
+                      </span>
                     </div>
-
-                    {isExpanded && categoryNodes.map(node => {
-                      const nPos = layoutData.nodePositions[node.id];
-                      if (!nPos) return null;
-                      const nSize = layoutData.nodeSizes?.[node.id] || 3;
-                      const sizeRem = `${nSize}rem`;
-
-                      return (
-                        <div
-                          key={node.id}
-                          className={`knowledge-node ${node.status === '薄弱' || node.status === 'weak' ? 'knowledge-node-weak' : ''}`}
-                          style={{
-                            top: `${nPos.y}%`,
-                            left: `${nPos.x}%`,
-                            transform: 'translate(-50%, -50%)'
-                          }}
-                          onClick={() => handleNodeClick(node)}
-                          onMouseEnter={(e) => handleNodeHover(node, e)}
-                          onMouseLeave={() => setHoveredNode(null)}
-                        >
-                          <div
-                            className={`knowledge-node-circle ${getNodeColorClass(node.status)} flex items-center justify-center shadow-lg transition-all duration-300 ${node.status === '薄弱' || node.status === 'weak' ? 'ring-4 ring-rose-200 animate-pulse-soft' : ''}`}
-                            style={{ width: sizeRem, height: sizeRem }}
-                          >
-                            <span
-                              className="text-white font-semibold px-1 text-center leading-tight"
-                              style={{
-                                fontSize: nSize <= 2.5 ? '0.5625rem' : nSize <= 3 ? '0.625rem' : '0.75rem',
-                                wordBreak: 'break-word',
-                                whiteSpace: 'normal',
-                                maxWidth: `${nSize * 2.5}rem`,
-                                overflow: 'hidden',
-                                textOverflow: 'ellipsis',
-                                display: '-webkit-box',
-                                WebkitLineClamp: 2,
-                                WebkitBoxOrient: 'vertical'
-                              }}
-                              title={node.name}
-                            >
-                              {node.name}
-                            </span>
-                          </div>
-                          <div className="knowledge-node-label knowledge-node-label-always">
-                            <span className={`text-xs font-medium ${getStatusTextColor(node.status)}`}>
-                              {node.status === 'weak' ? '薄弱' : node.status === 'mastered' ? '掌握' : node.status}
-                              {node.score !== undefined && node.score !== null && ` (${node.score}分)`}
-                            </span>
-                          </div>
-                          <div className={`knowledge-node-glow ${getNodeGlowClass(node.status)}`}></div>
-                        </div>
-                      );
-                    })}
-                  </React.Fragment>
+                    <div className="subject-node-label">
+                      <span className="text-xs font-semibold text-dark-600">{nodeCount} 个知识点</span>
+                    </div>
+                    <div className="subject-node-badge" style={{ background: color.bg }}>
+                      <span className="text-white text-xs font-bold">
+                        {isExpanded ? '−' : '+'}
+                      </span>
+                    </div>
+                    <div
+                      className="subject-node-glow"
+                      style={{ background: `radial-gradient(circle, ${color.glow} 0%, transparent 70%)` }}
+                    ></div>
+                  </div>
                 );
               })}
             </div>
