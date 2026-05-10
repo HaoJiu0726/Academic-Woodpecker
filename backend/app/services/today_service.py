@@ -65,23 +65,37 @@ def _get_week_range(offset: int = 0) -> tuple[datetime, datetime]:
 
 async def _get_weekly_duration(db: AsyncSession, user_id: int, offset: int = 0) -> float:
     start, end = _get_week_range(offset)
+    shift = timedelta(hours=8)
+    start_local = start - shift
+    end_local = end - shift
+    logger.info(f"_get_weekly_duration: START - user_id={user_id}, offset={offset}, start={start}, end={end}, start_local={start_local}, end_local={end_local}")
+
     result = await db.execute(
-        select(func.coalesce(func.sum(UserLearningRecord.duration_seconds), 0))
+        select(UserLearningRecord.id, UserLearningRecord.duration_seconds, UserLearningRecord.created_at)
         .where(
             and_(
                 UserLearningRecord.user_id == user_id,
-                UserLearningRecord.created_at >= start,
-                UserLearningRecord.created_at <= end,
+                UserLearningRecord.created_at >= start_local,
+                UserLearningRecord.created_at <= end_local,
             )
         )
     )
-    total_seconds = result.scalar() or 0
-    logger.info(f"_get_weekly_duration: user_id={user_id}, offset={offset}, start={start}, end={end}, total_seconds={total_seconds}")
-    return round(total_seconds / 3600, 1)
+    records = result.all()
+    logger.info(f"_get_weekly_duration: found {len(records)} records")
+
+    total_seconds = sum(r.duration_seconds or 0 for r in records)
+    logger.info(f"_get_weekly_duration: total_seconds={total_seconds} from {len(records)} records")
+
+    hours = round(total_seconds / 3600, 1)
+    logger.info(f"_get_weekly_duration: returning {hours} hours")
+    return hours
 
 
 async def _get_daily_durations(db: AsyncSession, user_id: int) -> dict[int, float]:
     start, end = _get_week_range(0)
+    shift = timedelta(hours=8)
+    start_local = start - shift
+    end_local = end - shift
     result = await db.execute(
         select(
             UserLearningRecord.created_at,
@@ -90,14 +104,13 @@ async def _get_daily_durations(db: AsyncSession, user_id: int) -> dict[int, floa
         .where(
             and_(
                 UserLearningRecord.user_id == user_id,
-                UserLearningRecord.created_at >= start,
-                UserLearningRecord.created_at <= end,
+                UserLearningRecord.created_at >= start_local,
+                UserLearningRecord.created_at <= end_local,
             )
         )
     )
     rows = result.all()
     day_hours: dict[int, float] = {}
-    shift = timedelta(hours=8)
     for row in rows:
         ts = row.created_at
         seconds = row.duration_seconds or 0
@@ -569,6 +582,8 @@ async def get_progress(db: AsyncSession, user_id: int) -> TodayProgressData:
     this_week_hours = await _get_weekly_duration(db, user_id, 0)
     last_week_hours = await _get_weekly_duration(db, user_id, -1)
 
+    logger.info(f"get_progress: user_id={user_id}, this_week_hours={this_week_hours}, last_week_hours={last_week_hours}")
+
     if last_week_hours > 0:
         weekly_growth = round((this_week_hours - last_week_hours) / last_week_hours, 2)
     else:
@@ -586,6 +601,8 @@ async def get_progress(db: AsyncSession, user_id: int) -> TodayProgressData:
             hours=day_hours.get(d, 0),
             isToday=(d == today_dow),
         ))
+
+    logger.info(f"get_progress: returning weeklyStudyHours={this_week_hours}, weeklyGrowthRate={weekly_growth}")
 
     return TodayProgressData(
         weeklyStudyHours=this_week_hours,
@@ -675,14 +692,24 @@ async def get_today_goals(db: AsyncSession, user_id: int) -> TodayGoalsData:
             for i, task in enumerate(first_week.get("tasks", [])[:5]):
                 goal_title = task.get("content", f"学习任务{i+1}")
                 if goal_title not in existing_titles:
+                    task_completed = task.get("completed", False)
+                    estimated_minutes = task.get("estimatedMinutes", 30)
                     new_goal = UserGoal(
                         user_id=user_id,
                         title=goal_title,
-                        estimated_minutes=task.get("estimatedMinutes", 30),
-                        completed=task.get("completed", False),
+                        estimated_minutes=estimated_minutes,
+                        completed=task_completed,
                         goal_date=datetime.now(),
                     )
                     db.add(new_goal)
+                    if task_completed:
+                        record = UserLearningRecord(
+                            user_id=user_id,
+                            action=LearningAction.completed,
+                            content=goal_title,
+                            duration_seconds=estimated_minutes * 60,
+                        )
+                        db.add(record)
                     existing_titles.add(goal_title)
             await db.commit()
 
@@ -798,35 +825,82 @@ async def delete_goal(db: AsyncSession, user_id: int, goal_id: str) -> bool:
 
 async def toggle_goal_completed(db: AsyncSession, user_id: int, goal_id: str) -> bool:
     try:
+        logger.info(f"toggle_goal_completed: START - user_id={user_id}, goal_id={goal_id}")
         parts = goal_id.split("_")
         if len(parts) < 3 or parts[0] != "goal" or parts[1] != "custom":
-            logger.warning(f"toggle_goal_completed: invalid goal_id format: {goal_id}")
+            logger.warning(f"toggle_goal_completed: invalid goal_id format: {goal_id}, parts={parts}")
             return False
         custom_id = int(parts[2])
+        logger.info(f"toggle_goal_completed: parsed custom_id={custom_id}")
+
         result = await db.execute(
             select(UserGoal).where(
                 and_(UserGoal.id == custom_id, UserGoal.user_id == user_id)
             )
         )
         goal = result.scalar_one_or_none()
+
         if not goal:
             logger.warning(f"toggle_goal_completed: goal not found: custom_id={custom_id}, user_id={user_id}")
             return False
-        was_completed = goal.completed
-        goal.completed = not goal.completed
-        logger.info(f"toggle_goal_completed: goal_id={goal_id}, was_completed={was_completed}, now_completed={goal.completed}, estimated_minutes={goal.estimated_minutes}")
-        if goal.completed and not was_completed:
-            duration_seconds = goal.estimated_minutes * 60 if goal.estimated_minutes else 0
-            record = UserLearningRecord(
-                user_id=user_id,
-                action=LearningAction.completed,
-                content=goal.title,
-                duration_seconds=duration_seconds,
+
+        logger.info(f"toggle_goal_completed: found goal - id={goal.id}, title={goal.title}, completed={goal.completed}, estimated_minutes={goal.estimated_minutes}")
+
+        was_completed = bool(goal.completed)
+        new_completed_state = not was_completed
+        goal.completed = new_completed_state
+        logger.info(f"toggle_goal_completed: toggled - was_completed={was_completed}, now_completed={new_completed_state}")
+
+        if new_completed_state and not was_completed:
+            existing_record = await db.execute(
+                select(UserLearningRecord).where(
+                    and_(
+                        UserLearningRecord.user_id == user_id,
+                        UserLearningRecord.content == goal.title,
+                        UserLearningRecord.action == LearningAction.completed,
+                    )
+                ).order_by(desc(UserLearningRecord.created_at)).limit(1)
             )
-            db.add(record)
-            logger.info(f"toggle_goal_completed: created learning record with duration_seconds={duration_seconds}")
-        await db.commit()
+            existing = existing_record.scalar_one_or_none()
+            if existing:
+                logger.info(f"toggle_goal_completed: learning record already exists for this goal, skipping - record.id={existing.id}")
+            else:
+                estimated_minutes = goal.estimated_minutes or 30
+                duration_seconds = estimated_minutes * 60
+                logger.info(f"toggle_goal_completed: creating learning record - estimated_minutes={estimated_minutes}, duration_seconds={duration_seconds}")
+
+                record = UserLearningRecord(
+                    user_id=user_id,
+                    action=LearningAction.completed,
+                    content=goal.title,
+                    duration_seconds=duration_seconds,
+                )
+                db.add(record)
+                await db.flush()
+                logger.info(f"toggle_goal_completed: record created successfully - record.id={record.id}")
+            await db.commit()
+        else:
+            record_to_delete = await db.execute(
+                select(UserLearningRecord).where(
+                    and_(
+                        UserLearningRecord.user_id == user_id,
+                        UserLearningRecord.content == goal.title,
+                        UserLearningRecord.action == LearningAction.completed,
+                    )
+                ).order_by(desc(UserLearningRecord.created_at)).limit(1)
+            )
+            record = record_to_delete.scalar_one_or_none()
+            if record:
+                logger.info(f"toggle_goal_completed: deleting learning record - record.id={record.id}, duration_seconds={record.duration_seconds}")
+                await db.delete(record)
+            await db.commit()
+            logger.info(f"toggle_goal_completed: goal uncompleted, deleted learning record if exists")
+
+        logger.info(f"toggle_goal_completed: END - returning True")
         return True
-    except (ValueError, IndexError) as e:
-        logger.error(f"toggle_goal_completed: error: {e}")
+
+    except Exception as e:
+        logger.error(f"toggle_goal_completed: EXCEPTION - {type(e).__name__}: {e}")
+        import traceback
+        logger.error(f"toggle_goal_completed: traceback: {traceback.format_exc()}")
         return False

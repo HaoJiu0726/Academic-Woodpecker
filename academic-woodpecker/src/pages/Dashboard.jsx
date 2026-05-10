@@ -371,8 +371,8 @@ const Dashboard = () => {
       if (nodeCount === 0) return;
 
       const nodeSize = nodeCount <= 3 ? 4 : nodeCount <= 6 ? 3.5 : nodeCount <= 10 ? 3 : 2.5;
-      const nodeRadius = Math.max(70, 55 + nodeCount * 6);
-      const angularSpread = Math.min(Math.PI * 1.5, Math.max(0.8, nodeCount * 0.5));
+      const nodeRadius = Math.max(165, 85 + nodeCount * 8);
+      const angularSpread = Math.min(Math.PI * 1.5, Math.max(1.0, nodeCount * 0.5));
       const startAngle = angle - angularSpread / 2;
 
       visibleNodes.forEach((node, ni) => {
@@ -392,7 +392,7 @@ const Dashboard = () => {
 
     const allNodeIds = Object.keys(nodePositions);
     const subjectIdSet = new Set(dynamicSubjects.map(s => s.id));
-    const minDist = 35;
+    const minDist = 45;
 
     for (let iter = 0; iter < 150; iter++) {
       let moved = false;
@@ -409,9 +409,9 @@ const Dashboard = () => {
           const dist = Math.sqrt(dx * dx + dy * dy);
           let effectiveMinDist = minDist;
           if (isSubjectA && isSubjectB) {
-            effectiveMinDist = minDist * 2.5;
+            effectiveMinDist = minDist * 3.0;
           } else if (isSubjectA || isSubjectB) {
-            effectiveMinDist = minDist * 2.0;
+            effectiveMinDist = minDist * 3.0 + 15;
           }
           if (dist < effectiveMinDist && dist > 0.01) {
             const overlap = (effectiveMinDist - dist) / 2;
