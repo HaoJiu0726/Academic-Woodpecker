@@ -147,6 +147,7 @@ const AnalysisPage = () => {
       setParsedData(result);
       setParseStage('解析完成');
       fetchHistory();
+      window.dispatchEvent(new CustomEvent('analysis:uploadComplete'));
     } catch (error) {
       console.error('获取结果失败:', error);
       setParseStage('获取结果失败');

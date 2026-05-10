@@ -76,13 +76,13 @@ const LoginPage = () => {
             studentId: formData.studentId || ''
           });
           dispatch(loginSuccess({
-            token: response.data?.token,
-            user: response.data?.user,
+            token: response.data.token,
+            user: response.data.userInfo,
             username: formData.username,
             nickname: formData.nickname
           }));
           const userResponse = await authApi.getCurrentUser();
-          if (userResponse.data) {
+          if (userResponse?.data) {
             dispatch(setUserInfo(userResponse.data));
           }
           alert('注册成功！');
@@ -111,12 +111,12 @@ const LoginPage = () => {
         try {
           const response = await authApi.login(formData.username, formData.password);
           dispatch(loginSuccess({
-            token: response.data?.token,
-            user: response.data?.user,
+            token: response.data.token,
+            user: response.data.userInfo,
             username: formData.username
           }));
           const userResponse = await authApi.getCurrentUser();
-          if (userResponse.data) {
+          if (userResponse?.data) {
             dispatch(setUserInfo(userResponse.data));
           }
           alert('登录成功！');
@@ -137,13 +137,13 @@ const LoginPage = () => {
             nickname: formData.nickname,
           });
           dispatch(loginSuccess({
-            token: response.data?.token,
-            user: response.data?.user,
+            token: response.data.token,
+            user: response.data.userInfo,
             username: formData.username,
             nickname: formData.nickname
           }));
           const userResponse = await authApi.getCurrentUser();
-          if (userResponse.data) {
+          if (userResponse?.data) {
             dispatch(setUserInfo(userResponse.data));
           }
           alert('注册成功！');

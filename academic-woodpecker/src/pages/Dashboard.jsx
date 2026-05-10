@@ -39,7 +39,9 @@ const Dashboard = () => {
   const [expandedSubjects, setExpandedSubjects] = useState({});
   const [zoomLevel, setZoomLevel] = useState(1);
   const [isDetailLoading, setIsDetailLoading] = useState(false);
+  const [isFullscreen, setIsFullscreen] = useState(false);
   const graphContainerRef = useRef(null);
+  const graphWrapperRef = useRef(null);
   const prevUserIdRef = useRef(userId);
 
   useEffect(() => {
@@ -74,6 +76,24 @@ const Dashboard = () => {
       setExpandedSubjects(initial);
     }
   }, [subjects]);
+
+  useEffect(() => {
+    const handleFullscreenChange = () => {
+      setIsFullscreen(
+        Boolean(document.fullscreenElement || document.webkitFullscreenElement || document.mozFullScreenElement || document.msFullscreenElement)
+      );
+    };
+    document.addEventListener('fullscreenchange', handleFullscreenChange);
+    document.addEventListener('webkitfullscreenchange', handleFullscreenChange);
+    document.addEventListener('mozfullscreenchange', handleFullscreenChange);
+    document.addEventListener('MSFullscreenChange', handleFullscreenChange);
+    return () => {
+      document.removeEventListener('fullscreenchange', handleFullscreenChange);
+      document.removeEventListener('webkitfullscreenchange', handleFullscreenChange);
+      document.removeEventListener('mozfullscreenchange', handleFullscreenChange);
+      document.removeEventListener('MSFullscreenChange', handleFullscreenChange);
+    };
+  }, []);
 
   const fetchDashboardData = async (statusFilter = null) => {
     setIsLoading(true);
@@ -132,7 +152,7 @@ const Dashboard = () => {
   };
 
   const handleMouseDown = (e) => {
-    if (e.target.closest('.knowledge-node') || e.target.closest('.subject-node') || e.target.closest('.graph-controls')) return;
+    if (e.target.closest('.knowledge-node') || e.target.closest('.subject-node') || e.target.closest('.graph-controls') || e.target.closest('.graph-top-controls')) return;
     setIsDragging(true);
     setDragStart({ x: e.clientX - graphOffset.x, y: e.clientY - graphOffset.y });
   };
@@ -198,6 +218,26 @@ const Dashboard = () => {
   const handleZoomOut = () => {
     setZoomLevel(prev => Math.max(0.3, prev - 0.2));
   };
+
+  const toggleFullscreen = useCallback(async () => {
+    const el = graphWrapperRef.current;
+    if (!el) return;
+    try {
+      if (!isFullscreen) {
+        if (el.requestFullscreen) await el.requestFullscreen();
+        else if (el.webkitRequestFullscreen) await el.webkitRequestFullscreen();
+        else if (el.mozRequestFullScreen) await el.mozRequestFullScreen();
+        else if (el.msRequestFullscreen) await el.msRequestFullscreen();
+      } else {
+        if (document.exitFullscreen) await document.exitFullscreen();
+        else if (document.webkitExitFullscreen) await document.webkitExitFullscreen();
+        else if (document.mozCancelFullScreen) await document.mozCancelFullScreen();
+        else if (document.msExitFullscreen) await document.msExitFullscreen();
+      }
+    } catch (err) {
+      console.error('全屏切换失败:', err);
+    }
+  }, [isFullscreen]);
 
   const getStatusTextColor = (status) => {
     switch (status) {
@@ -283,17 +323,30 @@ const Dashboard = () => {
     });
   }, [knowledgeGraph, selectedStatus]);
 
+  const dynamicSubjects = useMemo(() => {
+    if (!knowledgeGraph.length) return subjects;
+    const categoryMap = new Map();
+    knowledgeGraph.forEach(node => {
+      const cat = node.category || '未分类';
+      if (!categoryMap.has(cat)) {
+        categoryMap.set(cat, { id: `cat-${cat}`, name: cat, nodes: [] });
+      }
+      categoryMap.get(cat).nodes.push(node);
+    });
+    return Array.from(categoryMap.values());
+  }, [knowledgeGraph, subjects]);
+
   const layoutData = useMemo(() => {
-    const subjectCount = subjects.length;
+    const subjectCount = dynamicSubjects.length;
     if (subjectCount === 0) return { subjectPositions: {}, nodePositions: {}, nodeSizes: {} };
 
     const subjectPositions = {};
     const nodePositions = {};
     const nodeSizes = {};
 
-    const subjectRadius = Math.min(45, 20 + subjectCount * 2);
+    const subjectRadius = Math.min(42, 18 + subjectCount * 2);
 
-    subjects.forEach((subject, idx) => {
+    dynamicSubjects.forEach((subject, idx) => {
       const angle = (idx / subjectCount) * Math.PI * 2 - Math.PI / 2;
       const sx = 50 + Math.cos(angle) * subjectRadius;
       const sy = 50 + Math.sin(angle) * subjectRadius;
@@ -307,7 +360,7 @@ const Dashboard = () => {
       if (nodeCount === 0) return;
 
       const nodeSize = nodeCount <= 3 ? 4 : nodeCount <= 6 ? 3.5 : nodeCount <= 10 ? 3 : 2.5;
-      const nodeRadius = Math.max(38, 28 + nodeCount * 3.5);
+      const nodeRadius = Math.max(48, 38 + nodeCount * 4.5);
       const angularSpread = Math.min(Math.PI * 1.5, Math.max(0.8, nodeCount * 0.5));
       const startAngle = angle - angularSpread / 2;
 
@@ -327,10 +380,10 @@ const Dashboard = () => {
     });
 
     const allNodeIds = Object.keys(nodePositions);
-    const subjectIdSet = new Set(subjects.map(s => s.id));
-    const minDist = 23;
+    const subjectIdSet = new Set(dynamicSubjects.map(s => s.id));
+    const minDist = 28;
 
-    for (let iter = 0; iter < 110; iter++) {
+    for (let iter = 0; iter < 150; iter++) {
       let moved = false;
       for (let i = 0; i < allNodeIds.length; i++) {
         const idA = allNodeIds[i];
@@ -345,18 +398,18 @@ const Dashboard = () => {
           const dist = Math.sqrt(dx * dx + dy * dy);
           let effectiveMinDist = minDist;
           if (isSubjectA && isSubjectB) {
-            effectiveMinDist = minDist * 2.0;
+            effectiveMinDist = minDist * 2.2;
           } else if (isSubjectA || isSubjectB) {
-            effectiveMinDist = minDist * 1.5;
+            effectiveMinDist = minDist * 1.7;
           }
           if (dist < effectiveMinDist && dist > 0.01) {
             const overlap = (effectiveMinDist - dist) / 2;
             const nx = dx / dist;
             const ny = dy / dist;
-            posA.x -= nx * overlap * 1.0;
-            posA.y -= ny * overlap * 1.0;
-            posB.x += nx * overlap * 1.0;
-            posB.y += ny * overlap * 1.0;
+            posA.x -= nx * overlap * 1.1;
+            posA.y -= ny * overlap * 1.1;
+            posB.x += nx * overlap * 1.1;
+            posB.y += ny * overlap * 1.1;
             moved = true;
           }
         }
@@ -368,7 +421,7 @@ const Dashboard = () => {
       const pos = nodePositions[id];
       let bestSubject = null;
       let bestDist = Infinity;
-      for (const subject of subjects) {
+      for (const subject of dynamicSubjects) {
         const sPos = subjectPositions[subject.id];
         if (!sPos) continue;
         const dx = pos.x - sPos.x;
@@ -384,7 +437,7 @@ const Dashboard = () => {
         const dx = pos.x - sPos.x;
         const dy = pos.y - sPos.y;
         const d = Math.sqrt(dx * dx + dy * dy);
-        const maxDist = 48;
+        const maxDist = 58;
         if (d > maxDist) {
           pos.x = sPos.x + (dx / d) * maxDist;
           pos.y = sPos.y + (dy / d) * maxDist;
@@ -395,15 +448,15 @@ const Dashboard = () => {
     }
 
     return { subjectPositions, nodePositions, nodeSizes };
-  }, [subjects, filteredGraph, expandedSubjects]);
+  }, [dynamicSubjects, filteredGraph, expandedSubjects]);
 
   const subjectColorMap = useMemo(() => {
     const map = {};
-    subjects.forEach((s, i) => {
+    dynamicSubjects.forEach((s, i) => {
       map[s.id] = SUBJECT_COLORS[i % SUBJECT_COLORS.length];
     });
     return map;
-  }, [subjects]);
+  }, [dynamicSubjects]);
 
   return (
     <div className="dashboard-page">
@@ -554,16 +607,45 @@ const Dashboard = () => {
         <DailyPush />
       ) : (
         <div className="dashboard-content">
-        <div className="dashboard-graph">
+        <div className="dashboard-graph" ref={graphWrapperRef}>
           <div className="absolute top-0 right-0 w-64 h-64 bg-primary-500/5 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2"></div>
           <div className="dashboard-graph-header">
             <div>
               <h3 className="text-xl font-bold text-dark-800">知识图谱</h3>
               <p className="text-sm text-dark-400 mt-1">点击分类展开/折叠，点击知识点查看详情</p>
             </div>
-            <div className="dashboard-graph-badge">
-              <span className="dashboard-graph-badge-dot"></span>
-              <span>实时更新</span>
+            <div className="flex items-center gap-2">
+              <div className="graph-top-controls">
+                <button
+                  onClick={() => fetchDashboardData(selectedStatus)}
+                  className="graph-control-btn"
+                  title="刷新知识图谱"
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                  </svg>
+                </button>
+                <div className="graph-control-divider"></div>
+                <button
+                  onClick={toggleFullscreen}
+                  className="graph-control-btn"
+                  title={isFullscreen ? '退出全屏' : '全屏显示'}
+                >
+                  {isFullscreen ? (
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 9V4.5M9 9H4.5M9 9L3.75 3.75M15 9h4.5M15 9V4.5M15 9l5.25-5.25M9 15v4.5M9 15H4.5M9 15l-5.25 5.25M15 15h4.5M15 15v4.5m0-4.5l5.25 5.25" />
+                    </svg>
+                  ) : (
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3.75 3.75v4.5m0-4.5h4.5m-4.5 0L9 9M3.75 20.25v-4.5m0 4.5h4.5m-4.5 0L9 15M20.25 3.75h-4.5m4.5 0v4.5m0-4.5L15 9m5.25 11.25h-4.5m4.5 0v-4.5m0 4.5L15 15" />
+                    </svg>
+                  )}
+                </button>
+              </div>
+              <div className="dashboard-graph-badge">
+                <span className="dashboard-graph-badge-dot"></span>
+                <span>实时更新</span>
+              </div>
             </div>
           </div>
 
@@ -623,7 +705,7 @@ const Dashboard = () => {
             onMouseMove={handleMouseMove}
             onMouseUp={handleMouseUp}
             onMouseLeave={handleMouseUp}
-            style={{ cursor: isDragging ? 'grabbing' : 'grab', '--subject-count': subjects.length }}
+            style={{ cursor: isDragging ? 'grabbing' : 'grab', '--subject-count': dynamicSubjects.length }}
           >
             <div className="absolute inset-0 opacity-40">
               <div className="absolute top-1/4 left-1/4 w-32 h-32 bg-primary-200 rounded-full blur-3xl"></div>
@@ -635,7 +717,7 @@ const Dashboard = () => {
               style={{ transform: `translate(${graphOffset.x}px, ${graphOffset.y}px) scale(${zoomLevel})`, transformOrigin: 'center center' }}
             >
               <svg className="absolute inset-0 w-full h-full pointer-events-none" style={{ zIndex: 1 }}>
-                {subjects.map((subject) => {
+                {dynamicSubjects.map((subject) => {
                   const sPos = layoutData.subjectPositions[subject.id];
                   if (!sPos) return null;
                   const color = subjectColorMap[subject.id];
@@ -658,8 +740,6 @@ const Dashboard = () => {
                       {visibleNodes.map(node => {
                         const nPos = layoutData.nodePositions[node.id];
                         if (!nPos) return null;
-                        const midX = (sPos.x + nPos.x) / 2;
-                        const midY = (sPos.y + nPos.y) / 2;
                         return (
                           <line
                             key={`sline-${node.id}`}
@@ -686,7 +766,7 @@ const Dashboard = () => {
                 </div>
               </div>
 
-              {subjects.map((subject) => {
+              {dynamicSubjects.map((subject) => {
                 const sPos = layoutData.subjectPositions[subject.id];
                 if (!sPos) return null;
                 const color = subjectColorMap[subject.id];
@@ -748,7 +828,7 @@ const Dashboard = () => {
                 );
               })}
 
-              {subjects.map((subject) => {
+              {dynamicSubjects.map((subject) => {
                 const sPos = layoutData.subjectPositions[subject.id];
                 if (!sPos) return null;
                 const color = subjectColorMap[subject.id];
@@ -823,16 +903,6 @@ const Dashboard = () => {
 
             <div className="graph-controls">
               <button
-                onClick={() => fetchDashboardData(selectedStatus)}
-                className="graph-control-btn"
-                title="刷新知识图谱"
-              >
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                </svg>
-              </button>
-              <div className="graph-control-divider"></div>
-              <button
                 onClick={expandAllSubjects}
                 className="graph-control-btn"
                 title="全局展开"
@@ -887,7 +957,7 @@ const Dashboard = () => {
               <span className="text-sm text-dark-500 font-medium">薄弱</span>
             </div>
             <div className="flex-1"></div>
-            {subjects.map((subject) => {
+            {dynamicSubjects.map((subject) => {
               const color = subjectColorMap[subject.id];
               return (
                 <div key={subject.id} className="dashboard-graph-legend-item">

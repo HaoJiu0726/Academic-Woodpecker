@@ -44,6 +44,7 @@ const DailyPush = () => {
   const location = useLocation();
   const userId = useSelector((state) => state.user.userInfo?.id);
   const prevUserIdRef = useRef(userId);
+  const fetchAllDataRef = useRef(null);
   const [activeTab, setActiveTab] = useState('recommendations');
   const [pushData, setPushData] = useState(null);
   const [recommendations, setRecommendations] = useState([]);
@@ -93,6 +94,18 @@ const DailyPush = () => {
       fetchResourceDetail(resourceId);
     }
   }, [location.search]);
+
+  useEffect(() => {
+    const handleAnalysisUploadComplete = () => {
+      localStorage.removeItem(CACHE_KEY_PREFIX + 'recommendations');
+      localStorage.removeItem(CACHE_KEY_PREFIX + 'push');
+      if (fetchAllDataRef.current) {
+        fetchAllDataRef.current();
+      }
+    };
+    window.addEventListener('analysis:uploadComplete', handleAnalysisUploadComplete);
+    return () => window.removeEventListener('analysis:uploadComplete', handleAnalysisUploadComplete);
+  }, []);
 
   const fetchAllData = async () => {
     setIsLoading(true);
@@ -158,6 +171,7 @@ const DailyPush = () => {
       setIsLoading(false);
     }
   };
+  fetchAllDataRef.current = fetchAllData;
 
   const fetchFavorites = async () => {
     try {
@@ -250,6 +264,8 @@ const DailyPush = () => {
         const toggledGoal = prev.find(g => g.id === goalId);
         if (toggledGoal && !toggledGoal.completed) {
           recordGoalStudyTime(toggledGoal.estimatedMinutes);
+        } else if (toggledGoal && toggledGoal.completed) {
+          recordGoalStudyTime(-toggledGoal.estimatedMinutes);
         }
         return updated;
       });

@@ -6,6 +6,7 @@ from app.schemas.common import UnifiedResponse
 from app.api.deps import get_current_user
 from app.models.user import User
 from app.services import auth_service
+from app.core.security import create_access_token
 
 router = APIRouter(prefix="/api/auth", tags=["认证模块"])
 
@@ -18,12 +19,13 @@ async def login(req: LoginRequest, db: AsyncSession = Depends(get_db)):
     return UnifiedResponse(data=TokenResponse(token=token, userInfo=user_info))
 
 
-@router.post("/register", response_model=UnifiedResponse[UserInfo])
+@router.post("/register", response_model=UnifiedResponse[TokenResponse])
 async def register(req: RegisterRequest, db: AsyncSession = Depends(get_db)):
     """用户注册"""
     user = await auth_service.register(db, req)
+    token = create_access_token(data={"sub": str(user.id)})
     user_info = await auth_service.get_current_user_info(user)
-    return UnifiedResponse(data=user_info)
+    return UnifiedResponse(data=TokenResponse(token=token, userInfo=user_info))
 
 
 @router.get("/current-user", response_model=UnifiedResponse[UserInfo])

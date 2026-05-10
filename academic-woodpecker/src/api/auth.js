@@ -8,12 +8,15 @@ export const authApi = {
       nickname: userData.nickname,
       email: userData.email || ''
     });
+    if (response?.data?.token) {
+      setAuthToken(response.data.token);
+    }
     return response;
   },
 
   login: async (username, password) => {
     const response = await api.post('/api/auth/login', { username, password });
-    if (response.data?.token) {
+    if (response?.data?.token) {
       setAuthToken(response.data.token);
     }
     return response;
